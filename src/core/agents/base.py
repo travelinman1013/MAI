@@ -173,7 +173,7 @@ class BaseAgentFramework(Generic[ResultT]):
             )
             
             self.log_execution(start_time, True)
-            return result.data
+            return result.output
 
         except Exception as e:
             self.log_execution(start_time, False, e)
