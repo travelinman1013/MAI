@@ -261,6 +261,35 @@ class ValidationError(MAIException):
         )
 
 
+class EmbeddingGenerationError(MAIException):
+    """Error during embedding generation."""
+
+    def __init__(
+        self,
+        message: str,
+        model_name: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None,
+        retryable: bool = True,
+    ) -> None:
+        """Initialize EmbeddingGenerationError.
+
+        Args:
+            message: Error message.
+            model_name: Name of the embedding model that failed.
+            details: Additional error details.
+            retryable: Whether operation can be retried.
+        """
+        error_details = details or {}
+        if model_name:
+            error_details["model_name"] = model_name
+        super().__init__(
+            message=message,
+            error_code="EMBEDDING_GENERATION_ERROR",
+            details=error_details,
+            retryable=retryable,
+        )
+
+
 # Memory Errors
 
 

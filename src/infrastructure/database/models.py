@@ -11,10 +11,9 @@ Models:
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
 
 from src.infrastructure.database.base import BaseModel
 
@@ -70,7 +69,7 @@ class UserSession(BaseModel):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     access_token = Column(String(500), unique=True, nullable=False, index=True)
     refresh_token = Column(String(500), unique=True, nullable=True, index=True)
-    expires_at = Column(datetime, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
     is_revoked = Column(Boolean, default=False, nullable=False, index=True)
     ip_address = Column(String(45), nullable=True)  # IPv6 max length
     user_agent = Column(String(500), nullable=True)
@@ -104,7 +103,7 @@ class Conversation(BaseModel):
     agent_name = Column(String(255), nullable=False, index=True)
     title = Column(String(500), nullable=True)
     is_archived = Column(Boolean, default=False, nullable=False, index=True)
-    metadata = Column(Text, nullable=True)  # JSON stored as text
+    extra_metadata = Column(Text, nullable=True)  # JSON stored as text
 
     # Relationships
     user = relationship("User", back_populates="conversations")
@@ -141,7 +140,7 @@ class Message(BaseModel):
     content = Column(Text, nullable=False)
     tool_name = Column(String(255), nullable=True, index=True)
     tool_result = Column(Text, nullable=True)
-    metadata = Column(Text, nullable=True)  # JSON stored as text
+    extra_metadata = Column(Text, nullable=True)  # JSON stored as text
 
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")
@@ -178,10 +177,10 @@ class Memory(BaseModel):
         String(50), nullable=False, index=True
     )  # short_term, long_term, semantic
     importance = Column(Integer, default=0, nullable=False, index=True)  # 0-100
-    embedding = Column(Vector(1536), nullable=True)  # OpenAI embedding dimension
-    metadata = Column(Text, nullable=True)  # JSON stored as text
+    qdrant_id = Column(UUID(as_uuid=True), unique=True, nullable=True, index=True) # Link to Qdrant entry
+    extra_metadata = Column(Text, nullable=True)  # JSON stored as text
     accessed_count = Column(Integer, default=0, nullable=False)
-    last_accessed_at = Column(datetime, nullable=True, index=True)
+    last_accessed_at = Column(DateTime, nullable=True, index=True)
 
     # Relationships
     user = relationship("User", back_populates="memories")
@@ -191,12 +190,5 @@ class Memory(BaseModel):
         Index("idx_memories_user_type", "user_id", "memory_type", "created_at"),
         Index("idx_memories_importance", "importance", "created_at"),
         Index("idx_memories_agent", "agent_name", "created_at"),
-        # Vector index for similarity search
-        Index(
-            "idx_memories_embedding",
-            "embedding",
-            postgresql_using="ivfflat",
-            postgresql_with={"lists": 100},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
+        Index("idx_memories_qdrant_id", "qdrant_id"),
     )
