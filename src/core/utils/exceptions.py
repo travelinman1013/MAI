@@ -427,6 +427,34 @@ class TimeoutError(MAIException):
         )
 
 
+class ToolTimeoutError(TimeoutError):
+    """Specific error for when a tool execution times out."""
+
+    def __init__(
+        self,
+        message: str = "Tool execution timed out",
+        tool_name: Optional[str] = None,
+        timeout_seconds: Optional[float] = None,
+        details: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Initialize ToolTimeoutError.
+
+        Args:
+            message: Error message.
+            tool_name: Name of the tool that timed out.
+            timeout_seconds: Timeout duration that was exceeded.
+            details: Additional error details.
+        """
+        error_details = details or {}
+        if tool_name:
+            error_details["tool_name"] = tool_name
+        super().__init__(
+            message=message,
+            timeout_seconds=timeout_seconds,
+            details=error_details,
+        )
+
+
 # Rate Limit Errors
 
 
@@ -454,4 +482,32 @@ class RateLimitError(MAIException):
             error_code="RATE_LIMIT_ERROR",
             details=error_details,
             retryable=True,
+        )
+
+
+class RateLimitExceededError(RateLimitError):
+    """Specific error for when a tool's rate limit is exceeded."""
+
+    def __init__(
+        self,
+        message: str = "Tool rate limit exceeded",
+        tool_name: Optional[str] = None,
+        retry_after: Optional[int] = None,
+        details: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Initialize RateLimitExceededError.
+
+        Args:
+            message: Error message.
+            tool_name: Name of the tool whose rate limit was exceeded.
+            retry_after: Seconds to wait before retrying.
+            details: Additional error details.
+        """
+        error_details = details or {}
+        if tool_name:
+            error_details["tool_name"] = tool_name
+        super().__init__(
+            message=message,
+            retry_after=retry_after,
+            details=error_details,
         )

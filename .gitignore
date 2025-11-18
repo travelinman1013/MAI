@@ -90,3 +90,6 @@ coverage.xml
 
 # Profiling
 *.prof
+
+.gemini/
+gha-creds-*.json
