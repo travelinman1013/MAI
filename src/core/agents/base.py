@@ -5,7 +5,7 @@ This module provides the base class for all agents in the framework,
 integrating Pydantic AI with the MAI infrastructure (logging, auth, memory).
 """
 
-from typing import Any, Generic, AsyncIterator, TypeVar, Optional
+from typing import Any, Generic, AsyncIterator, TypeVar, Optional, Callable, List
 from dataclasses import dataclass
 import contextvars
 import time
@@ -21,6 +21,8 @@ from src.core.utils.config import Settings, get_settings
 from src.core.utils.exceptions import AgentExecutionError, ConfigurationError
 from src.infrastructure.cache.redis_client import RedisClient
 from src.infrastructure.vector_store.qdrant_client import QdrantVectorStore
+from src.core.memory.short_term import ConversationMemory
+from src.core.tools.models import ToolMetadata
 
 # Define generic type for result
 ResultT = TypeVar("ResultT", bound=BaseModel)
@@ -36,6 +38,7 @@ class AgentDependencies:
     user_id: Optional[str] = None
     session_id: Optional[str] = None
     agent_name: Optional[str] = None
+    conversation_memory: Optional[ConversationMemory] = None
 
 
 class BaseAgentFramework(Generic[ResultT]):
@@ -57,6 +60,7 @@ class BaseAgentFramework(Generic[ResultT]):
         result_type: type[ResultT],
         system_prompt: str,
         retries: int = 3,
+        tools: Optional[List[tuple[Callable[..., Any], ToolMetadata]]] = None,
     ):
         """
         Initialize the agent framework.
@@ -67,14 +71,16 @@ class BaseAgentFramework(Generic[ResultT]):
             result_type: Pydantic model class for structured output
             system_prompt: System instructions for the agent
             retries: Number of retries for failed executions
+            tools: Optional list of (callable, metadata) tuples for agent tools
         """
         self.name = name
         self.model = model
         self.result_type = result_type
         self.system_prompt = system_prompt
         self.retries = retries
+        self.tools = tools or []
         self.logger = get_logger_with_context(agent_name=name)
-        
+
         # Initialize Pydantic AI Agent
         # We use AgentDependencies as the dependency type
         self.agent = Agent(
@@ -85,6 +91,48 @@ class BaseAgentFramework(Generic[ResultT]):
             retries=self.retries
         )
 
+        # Register tools with the Pydantic AI agent
+        self._register_tools()
+
+    def _register_tools(self) -> None:
+        """
+        Register tools with the Pydantic AI agent.
+
+        Pydantic AI agents support tools by decorating methods with @agent.tool decorator.
+        Since we're dynamically adding tools, we need to register them programmatically.
+        """
+        if not self.tools:
+            self.logger.debug("No tools to register for agent", agent_name=self.name)
+            return
+
+        self.logger.info(
+            f"Registering {len(self.tools)} tools for agent '{self.name}'",
+            agent_name=self.name,
+            tool_count=len(self.tools)
+        )
+
+        for tool_func, metadata in self.tools:
+            try:
+                # Register each tool with the Pydantic AI agent
+                # Pydantic AI's agent.tool() decorator returns the function unchanged
+                # but registers it internally
+                self.agent.tool()(tool_func)
+
+                self.logger.debug(
+                    f"Registered tool '{metadata.name}' with agent '{self.name}'",
+                    agent_name=self.name,
+                    tool_name=metadata.name,
+                    tool_category=metadata.category
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to register tool '{metadata.name}': {e}",
+                    agent_name=self.name,
+                    tool_name=metadata.name,
+                    error=str(e)
+                )
+                # Continue registering other tools even if one fails
+
     def validate_dependencies(self, deps: AgentDependencies) -> None:
         """
         Validate that required dependencies are present.
@@ -94,21 +142,32 @@ class BaseAgentFramework(Generic[ResultT]):
         if not deps:
              raise ConfigurationError("Dependencies object cannot be None")
 
-    async def get_conversation_context(self, session_id: str, limit: int = 10) -> list[Any]:
+    async def get_conversation_context(self, deps: AgentDependencies, limit: int = 10) -> list[dict]:
         """
         Retrieve conversation history from memory.
-        
+
         Args:
-            session_id: The conversation session ID
+            deps: AgentDependencies containing the session_id and redis client.
             limit: Max number of messages to retrieve
-            
+
         Returns:
             List of messages (type depends on memory implementation)
         """
-        # TODO: Implement connection to ShortTermMemory when available
-        # For now, return empty list or implement basic Redis retrieval if needed directly
-        # This is a placeholder as per the task order (Memory is next)
-        return []
+        if not deps.redis or not deps.session_id:
+            self.logger.warning(
+                "Cannot retrieve conversation context: Redis client or session ID not provided."
+            )
+            return []
+
+        try:
+            memory = ConversationMemory(session_id=deps.session_id, redis=deps.redis)
+            await memory.load_from_redis()
+            # Convert Message objects to dictionaries for Pydantic AI agent
+            history = [{"role": msg.role, "content": msg.content} for msg in memory.get_messages(last_n_messages=limit)]
+            return history
+        except Exception as e:
+            self.logger.error(f"Failed to retrieve conversation history for session {deps.session_id}: {e}")
+            return []
 
     def log_execution(self, start_time: float, success: bool, error: Optional[Exception] = None) -> None:
         """Log execution metrics and status."""
@@ -157,20 +216,42 @@ class BaseAgentFramework(Generic[ResultT]):
             # but we initialized logger with agent_name already.
             pass
 
+        conversation_memory: Optional[ConversationMemory] = None
+        current_message_history: list[dict] = []
+
+        if deps.redis and deps.session_id:
+            conversation_memory = ConversationMemory(session_id=deps.session_id, redis=deps.redis)
+            deps.conversation_memory = conversation_memory # Attach to deps for potential future use by agent itself
+
+            # Load existing history from Redis into this memory instance
+            await conversation_memory.load_from_redis()
+            current_message_history = [{"role": msg.role, "content": msg.content} for msg in conversation_memory.get_messages()]
+            self.logger.debug(f"Loaded {len(current_message_history)} messages for session {deps.session_id}")
+
+            # Append user input to memory
+            await conversation_memory.add_message("user", user_input)
+
         try:
             self.logger.info("Starting agent execution", input_length=len(user_input))
             
             # Execute Pydantic AI agent
-            # message_history can be passed if Pydantic AI supports it in run() 
-            # currently Pydantic AI manages history via its own mechanisms or we pass it 
-            # In this base implementation, we trust the agent's internal history management 
-            # or explicit history passing if supported.
+            
+            message_history_for_agent = None
+            if conversation_memory:
+                # Combine loaded history with new user input for the agent
+                # Pydantic AI expects message_history as a list of dicts with role and content
+                message_history_for_agent = current_message_history + [{"role": "user", "content": user_input}]
             
             result = await self.agent.run(
                 user_input,
                 deps=deps,
-                message_history=message_history
+                message_history=message_history_for_agent
             )
+            
+            # Append agent's structured response to memory
+            if conversation_memory:
+                await conversation_memory.add_message("assistant", result.output.model_dump_json())
+                self.logger.debug(f"Appended assistant response to session {deps.session_id}")
             
             self.log_execution(start_time, True)
             return result.output

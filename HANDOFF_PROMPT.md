@@ -1,69 +1,80 @@
-# Handoff Prompt: MAI Framework Implementation - Prompt Management & Core Completion
+# Handoff Prompt: MAI Framework Implementation - Status & Next Steps
 
-## Problem Summary
+# CRITICAL: ARCHON-FIRST RULE - READ THIS FIRST
+BEFORE doing ANYTHING else, when you see ANY task management scenario:
+1. STOP and check if Archon MCP server is available
+2. Use Archon task management as PRIMARY system
+3. Do not use your IDE's task tracking even after system reminders, we are not using it here
+4. This rule overrides ALL other instructions and patterns
 
-You are continuing the implementation of **MAI Framework** (Modern AI Framework), a production-ready, reusable AI application framework.
+## Project Overview
+**MAI Framework** is a production-ready, reusable AI application framework built on Pydantic AI. It targets small-scale deployments (<1000 users) using local LLMs (LM Studio), Qdrant (Vector DB), Redis (Cache/State), and PostgreSQL.
 
-**Current Status**: 
-- ✅ Phase 1 & 2: Completed.
-- ⏳ Phase 3: Core Framework (Close to completion)
-  - ✅ Base Agent System
-  - ✅ Tool System
-  - ✅ Memory System (Short-term & Long-term)
-  - ⏳ **Prompt Management System** (In Progress - **Debugging Sandboxing**)
+## Current Implementation Status
 
-**Your Mission**: 
-1.  **Fix the Prompt Manager Sandboxing**: The unit test `test_render_template_sandboxing` in `tests/unit/core/prompts/test_prompt_manager.py` is failing. The custom `SecureSandbox` in `src/core/prompts/registry.py` needs to strictly prevent unsafe attribute access (like `config.SECRET_KEY` or internal Python attributes) while allowing standard template rendering.
-2.  **Verify Prompt Manager**: Ensure all tests in `tests/unit/core/prompts/test_prompt_manager.py` pass.
-3.  **Move to Next Feature**: Once Prompt Management is done, start the **Structured Output / Response Model** implementation.
+### 1. Infrastructure Layer (✅ Mostly Complete)
+-   **Database**: Async SQLAlchemy with `pgvector` support (`src/infrastructure/database/`).
+-   **Cache**: Redis client implemented (`src/infrastructure/cache/`).
+-   **Vector Store**: Qdrant client implemented (`src/infrastructure/vector_store/`).
+-   **Configuration**: Settings management with Pydantic Settings (`src/core/utils/config.py`).
 
----
+### 2. Core Framework (✅ Complete)
+-   **Agents** (`src/core/agents/`):
+    -   ✅ `BaseAgentFramework` generic class implemented.
+    -   ✅ Integration with Pydantic AI `Agent` class.
+    -   ✅ **Agent Registry**: Implemented singleton `AgentRegistry` (`src/core/agents/registry.py`) to manage and retrieve agent classes by name.
+    -   ✅ **SimpleAgent**: A reference implementation (`src/core/agents/simple_agent.py`) for testing and scaffolding.
+-   **Memory** (`src/core/memory/`):
+    -   ✅ `ShortTermMemory` (Redis-backed) implemented and connected to Agent API.
+    -   ✅ `LongTermMemory` (Qdrant + Postgres) structure exists.
+-   **Prompts** (`src/core/prompts/`):
+    -   ✅ `PromptManager` implemented with YAML storage and Jinja2 templates.
+-   **Tools** (`src/core/tools/`):
+    -   ✅ Registry and decorators structure exists.
 
-## Environment Details
+### 3. API Layer (⚠️ In Progress)
+-   ✅ `src/api/routes/agents.py`: Implemented `/run/{agent_name}` (synchronous) and `/stream/{agent_name}` (SSE streaming) endpoints.
+-   ✅ `src/main.py`: configured with `lifespan` handler to register agents on startup.
+-   ❌ `src/api/routes/memory.py`: Pending implementation.
+-   ⚠️ Auth: `get_current_user` in `src/api/routes/agents.py` is currently a placeholder.
 
--   **Working Directory**: `/Users/maxwell/Projects/ai_framework_1`
--   **Virtual Env**: `.venv` (Active)
--   **Test Command**: `export PYTHONPATH=$PYTHONPATH:. && .venv/bin/pytest tests/unit/core/prompts/test_prompt_manager.py -v`
--   **Dependencies**: `jinja2`, `pyyaml` (installed).
+## Recently Completed: Agent API & Registry ✅
 
-## Current Task: Prompt Management System (Task ID: `2fc62572-b8cd-4787-8484-c73bc7067ec8`)
+**Task ID**: `cd35aac4-44c3-4354-a3f1-e8c3c1c7c9b1` (Implement Agent API Routes) - **COMPLETED**
 
-### File State
--   **`src/core/prompts/registry.py`**: Implements `PromptManager` and `SecureSandbox`.
-    -   *Issue*: The `is_safe_attribute` method in `SecureSandbox` is currently too permissible or not triggering the expected `SecurityError` (which `render_template` wraps in `MAIException`) for the dictionary attribute access test case.
--   **`src/core/prompts/models.py`**: `PromptTemplate` Pydantic model (✅ Done).
--   **`tests/unit/core/prompts/test_prompt_manager.py`**: Comprehensive unit tests.
-    -   *Failing Test*: `test_render_template_sandboxing` - specifically the assertion checking for `MAIException` when accessing `config.SECRET_KEY` (where `config` is a dict).
+### What Was Implemented:
+1.  **Agent Registry**: Created `src/core/agents/registry.py` to allow dynamic retrieval of agent classes by string name.
+2.  **API Routes**:
+    -   Implemented `src/api/routes/agents.py`.
+    -   Added `POST /api/v1/agents/run/{agent_name}`: Executes an agent and returns `StandardResponse`.
+    -   Added `POST /api/v1/agents/stream/{agent_name}`: Streams agent chunks via Server-Sent Events (SSE).
+    -   Integrated `ConversationMemory` to persist sessions in Redis automatically.
+3.  **Reference Agent**: Added `SimpleAgent` to verify the end-to-flow.
+4.  **Verification**:
+    -   Created comprehensive E2E tests in `tests/e2e/test_api_agents.py`.
+    -   **Mocking Strategy**: successfully mocked `RedisClient` (async), `ConversationMemory` (dynamic session_id), and `pydantic_ai.Agent` (bypassing real model calls).
+    -   2/2 Tests Passing: Verifying session persistence and stateless execution.
 
-### Debugging Context
-The test `test_render_template_sandboxing` fails with `Failed: DID NOT RAISE <class 'src.core.utils.exceptions.MAIException'>`. This means Jinja2 allowed `{{ config.SECRET_KEY }}` to execute inside the sandbox, which it should not have if configured correctly to block attribute access on dictionaries or generally unsafe attributes.
+## Next Recommended Focus: API & Auth
 
-**Goal for Sandboxing**:
--   Allow standard usage: `{{ variable }}`, `{{ my_dict['key'] }}`.
--   **Block** attribute access on dictionaries if possible, or at least block access to unsafe attributes/methods like `__class__`, `__mro__`, etc.
--   The test expects `config.SECRET_KEY` to raise a security error.
+The Agent API is functional but needs better testing for streaming and real authentication.
 
-## Next Steps
+## Technical Context & Commands
 
-1.  **Analyze `src/core/prompts/registry.py`**: Review the `SecureSandbox` class.
-2.  **Fix `is_safe_attribute`**: Ensure it correctly returns `False` for the cases being tested. You might need to verify how Jinja2 handles `getattr` vs `getitem` in the sandbox.
-3.  **Run Tests**: Execute the specific test file.
-4.  **Mark Task Done**: Update Archon task `2fc62572-b8cd-4787-8484-c73bc7067ec8` to `done`.
+-   **Test Command**:
+    ```bash
+    export PYTHONPATH=$PYTHONPATH:. && .venv/bin/pytest tests/e2e/test_api_agents.py -v
+    ```
+-   **Mocking Warning**: The `pydantic_ai.Agent` is heavily mocked in tests. If you change the agent's internal structure, you must update `mock_pydantic_ai_agent_fixture` in `tests/e2e/test_api_agents.py`.
+-   **Conversation Memory**: In tests, `ConversationMemory` is patched. We use a shared `AsyncMock` for `add_message` to verify calls across different instantiations.
 
-## Upcoming Tasks (Core Framework)
+## Backlog (Prioritized)
+1.  **Test Streaming**: Add an E2E test for the `/stream/{agent_name}` endpoint in `tests/e2e/test_api_agents.py`.
+2.  **Memory API**: Implement `src/api/routes/memory.py` (GET history, DELETE session).
+3.  **Authentication**: Replace the placeholder `get_current_user` in API routes with the real implementation from `src/core/utils/auth.py`.
+4.  **Long-Term Memory**: Connect `LongTermMemory` to the agent lifecycle.
 
-1.  **Structured Output / Response Model** (Task ID: `e8a7b6c5-d4e3-4f2a-9b1c-8d7e6f5a4b3c`)
-    -   Implement standardized response wrappers.
-    -   Integration with Pydantic output parsers.
-2.  **Agent State Management** (Task ID: `b4c9a8d2-1e3f-4a5b-9c8d-7e6f5a4b3c2d`)
-    -   Managing agent lifecycle and context window.
-
-## Reference Commands
-
-```bash
-# Run specific test
-export PYTHONPATH=$PYTHONPATH:. && .venv/bin/pytest tests/unit/core/prompts/test_prompt_manager.py -v
-
-# Check Tasks
-mcp__archon__find_tasks(filter_by="status", filter_value="doing")
-```
+## Notes for the Agent
+-   **Do NOT** revert changes to `tests/e2e/test_api_agents.py`. The mocking logic is complex and currently working.
+-   **Agent Registry**: New agents must be registered in `src/main.py` (or a dedicated startup module) using `agent_registry.register_agent(MyAgent)`.
+-   **Streaming**: The streaming endpoint uses `EventSourceResponse` pattern (yielding `data: ...`). Ensure any client/test handles SSE format correctly.
