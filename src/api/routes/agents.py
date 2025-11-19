@@ -1,90 +1,428 @@
+"""
+Agent API Routes.
 
+This module implements the FastAPI endpoints for agent execution,
+streaming, and session management.
+"""
+
+import time
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse # Import StreamingResponse
-from pydantic import BaseModel, Field
+from fastapi.responses import StreamingResponse
 from typing import Optional
+from datetime import datetime
 
 from src.core.agents.base import BaseAgentFramework, AgentDependencies
 from src.core.memory.short_term import ConversationMemory
 from src.core.utils.auth import get_current_user
-from src.infrastructure.cache.redis_client import get_redis_client 
-from src.core.agents.registry import agent_registry 
-from src.core.models.responses import ChatResponse # Import ChatResponse
+from src.core.utils.exceptions import AgentExecutionError, ResourceNotFoundError
+from src.core.utils.logging import get_logger_with_context
+from src.infrastructure.cache.redis_client import get_redis_client
+from src.core.agents.registry import agent_registry
+from src.core.tools.registry import tool_registry
+from src.core.models.responses import ChatResponse
+from src.core.models.lmstudio_provider import create_lmstudio_model_async
+from src.api.schemas.agents import (
+    AgentRunRequest,
+    AgentStreamRequest,
+    AgentRunResponse,
+    AgentStreamChunk,
+    ConversationHistoryResponse,
+    SessionDeleteResponse,
+    AgentErrorResponse,
+    ErrorDetail,
+    ToolCallInfo
+)
 
 router = APIRouter()
+logger = get_logger_with_context(module="agent_routes")
 
-class AgentInput(BaseModel):
-    session_id: Optional[str] = Field(None, description="Optional session ID for multi-turn conversations.")
-    user_input: str = Field(..., description="The user's input message to the agent.")
-    agent_name: str = Field(..., description="The name of the agent to interact with.")
 
-@router.post("/run/{agent_name}", summary="Run a single-turn agent interaction or continue a conversation")
+async def _create_agent_instance(
+    agent_name: str,
+    tools_enabled: bool = True
+) -> BaseAgentFramework:
+    """
+    Create an agent instance with proper model and tool configuration.
+
+    Args:
+        agent_name: Name of the agent to create
+        tools_enabled: Whether to load and register tools with the agent
+
+    Returns:
+        Configured agent instance
+
+    Raises:
+        ValueError: If agent not found in registry
+        ModelError: If LM Studio model creation fails
+    """
+    # Get agent class from registry
+    AgentClass = agent_registry.get_agent(agent_name)
+    if not AgentClass:
+        raise ValueError(f"Agent '{agent_name}' not found in registry")
+
+    # Create LM Studio model
+    model = await create_lmstudio_model_async(auto_detect=True, test_connection=False)
+
+    # Get tools if enabled
+    tools = None
+    if tools_enabled:
+        all_tools = tool_registry.list_all_tools()
+        if all_tools:
+            tools = all_tools
+            logger.info(f"Loaded {len(tools)} tools for agent '{agent_name}'", tool_count=len(tools))
+
+    # Create agent instance
+    # Note: AgentClass should have a factory method or accept these parameters
+    # For now, we'll create a generic instance
+    agent_instance = AgentClass(
+        name=agent_name,
+        model=model,
+        result_type=ChatResponse,
+        system_prompt=f"You are a helpful AI assistant named {agent_name}.",
+        tools=tools
+    )
+
+    return agent_instance
+
+
+@router.post(
+    "/run/{agent_name}",
+    response_model=AgentRunResponse,
+    summary="Execute an agent",
+    description="Run a single agent interaction with optional session management and tool execution."
+)
 async def run_agent(
     agent_name: str,
-    input_data: AgentInput,
-    current_user: str = Depends(get_current_user) # Placeholder for authentication
-):
+    request: AgentRunRequest,
+    current_user: str = Depends(get_current_user)
+) -> AgentRunResponse:
     """
-    Runs a single interaction with the specified agent.
-    If a session_id is provided, it continues a multi-turn conversation.
-    """
-    redis_client = await get_redis_client() 
-    
-    try:
-        # Retrieve agent from registry
-        AgentClass = agent_registry.get_agent(agent_name)
-        agent_instance = AgentClass(model="dummy-model", result_type=ChatResponse, system_prompt="dummy system prompt")
+    Execute an agent with the provided input.
 
-        dependencies = AgentDependencies(
-            conversation_memory=ConversationMemory(session_id=input_data.session_id, redis=redis_client) if input_data.session_id else None
+    - **agent_name**: Name of the agent to execute
+    - **user_input**: The user's message/query
+    - **session_id**: Optional session ID for conversation history
+    - **user_id**: Optional user ID for user-specific context
+    - **config**: Optional configuration overrides
+
+    Returns structured response with agent result and tool call information.
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(
+            f"Agent run request received",
+            agent_name=agent_name,
+            user=current_user,
+            session_id=request.session_id,
+            has_config=request.config is not None
         )
 
-        # Run the agent
-        result = await agent_instance.run_async(user_input=input_data.user_input, dependencies=dependencies)
-        
-        # Return the structured response
-        return {"agent_response": result.data.model_dump()}
+        # Get Redis client
+        redis_client = await get_redis_client()
+
+        # Create agent instance
+        agent_instance = await _create_agent_instance(agent_name, tools_enabled=True)
+
+        # Set up dependencies
+        deps = AgentDependencies(
+            redis=redis_client,
+            session_id=request.session_id,
+            user_id=request.user_id or current_user,
+            agent_name=agent_name
+        )
+
+        # Execute agent
+        result = await agent_instance.run_async(
+            user_input=request.user_input,
+            deps=deps
+        )
+
+        # Calculate execution time
+        execution_time_ms = (time.time() - start_time) * 1000
+
+        # Build response
+        response = AgentRunResponse(
+            success=True,
+            agent_name=agent_name,
+            session_id=request.session_id,
+            result=result.model_dump() if hasattr(result, 'model_dump') else {"data": str(result)},
+            tool_calls=[],  # TODO: Extract tool calls from execution
+            execution_time_ms=execution_time_ms,
+            timestamp=datetime.utcnow()
+        )
+
+        logger.info(
+            f"Agent execution completed successfully",
+            agent_name=agent_name,
+            execution_time_ms=execution_time_ms
+        )
+
+        return response
 
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.error(f"Agent not found: {agent_name}", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error_code": "AGENT_NOT_FOUND", "message": str(e)}
+        )
 
-@router.post("/stream/{agent_name}", summary="Stream agent interaction or continue a conversation")
+    except AgentExecutionError as e:
+        logger.error(f"Agent execution failed: {agent_name}", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "AGENT_EXECUTION_ERROR",
+                "message": str(e),
+                "retryable": True
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Unexpected error in agent execution", agent_name=agent_name, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred",
+                "retryable": False
+            }
+        )
+
+
+@router.post(
+    "/stream/{agent_name}",
+    summary="Stream agent responses",
+    description="Execute an agent with Server-Sent Events (SSE) streaming for real-time responses."
+)
 async def stream_agent(
     agent_name: str,
-    input_data: AgentInput,
-    current_user: str = Depends(get_current_user) # Placeholder for authentication
+    request: AgentStreamRequest,
+    current_user: str = Depends(get_current_user)
 ):
     """
-    Streams an interaction with the specified agent.
-    If a session_id is provided, it continues a multi-turn conversation.
+    Stream agent responses using Server-Sent Events.
+
+    - **agent_name**: Name of the agent to execute
+    - **user_input**: The user's message/query
+    - **session_id**: Optional session ID for conversation history
+    - **user_id**: Optional user ID for user-specific context
+    - **config**: Optional configuration overrides
+
+    Returns a stream of chunks as they are generated.
     """
-    redis_client = await get_redis_client()
-
     try:
-        AgentClass = agent_registry.get_agent(agent_name)
-        agent_instance = AgentClass(model="dummy-model", result_type=ChatResponse, system_prompt="dummy system prompt")
-
-        dependencies = AgentDependencies(
-            conversation_memory=ConversationMemory(session_id=input_data.session_id, redis=redis_client) if input_data.session_id else None
+        logger.info(
+            f"Agent stream request received",
+            agent_name=agent_name,
+            user=current_user,
+            session_id=request.session_id
         )
 
+        # Get Redis client
+        redis_client = await get_redis_client()
+
+        # Create agent instance
+        agent_instance = await _create_agent_instance(agent_name, tools_enabled=True)
+
+        # Set up dependencies
+        deps = AgentDependencies(
+            redis=redis_client,
+            session_id=request.session_id,
+            user_id=request.user_id or current_user,
+            agent_name=agent_name
+        )
+
+        # Generator function for streaming
         async def event_generator():
-            full_response_content = "" # To reconstruct for the agent's full response for memory
-            async for chunk in agent_instance.run_stream(user_input=input_data.user_input, dependencies=dependencies):
-                chunk_data = chunk.data.model_dump()
-                full_response_content += chunk_data["content"]
-                yield f"data: {chunk.data.model_dump_json()}\n\n"
-            
-            # Save the full agent response to memory after streaming is complete
-            if dependencies.conversation_memory:
-                await dependencies.conversation_memory.add_message("assistant", full_response_content)
+            try:
+                full_response = ""
+                chunk_count = 0
 
+                # Stream from agent
+                async for chunk in agent_instance.run_stream(
+                    user_input=request.user_input,
+                    deps=deps
+                ):
+                    chunk_count += 1
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+                    # Extract content from chunk
+                    if hasattr(chunk, 'content'):
+                        content = chunk.content
+                    elif hasattr(chunk, 'data'):
+                        content = chunk.data.get('content', '') if isinstance(chunk.data, dict) else str(chunk.data)
+                    else:
+                        content = str(chunk)
+
+                    full_response += content
+
+                    # Create chunk response
+                    chunk_data = AgentStreamChunk(
+                        content=content,
+                        done=False
+                    )
+
+                    # Send as SSE
+                    yield f"data: {chunk_data.model_dump_json()}\n\n"
+
+                # Send final chunk
+                final_chunk = AgentStreamChunk(
+                    content="",
+                    done=True
+                )
+                yield f"data: {final_chunk.model_dump_json()}\n\n"
+
+                logger.info(
+                    f"Agent streaming completed",
+                    agent_name=agent_name,
+                    chunk_count=chunk_count,
+                    response_length=len(full_response)
+                )
+
+            except Exception as e:
+                logger.error(f"Error during streaming", agent_name=agent_name, error=str(e))
+                error_chunk = AgentStreamChunk(
+                    content=f"Error: {str(e)}",
+                    done=True
+                )
+                yield f"data: {error_chunk.model_dump_json()}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
 
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        logger.error(f"Agent not found: {agent_name}", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error_code": "AGENT_NOT_FOUND", "message": str(e)}
+        )
+
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.error(f"Unexpected error in agent streaming", agent_name=agent_name, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred"
+            }
+        )
+
+
+@router.get(
+    "/history/{session_id}",
+    response_model=ConversationHistoryResponse,
+    summary="Get conversation history",
+    description="Retrieve the conversation history for a specific session."
+)
+async def get_conversation_history(
+    session_id: str,
+    current_user: str = Depends(get_current_user),
+    limit: Optional[int] = None
+) -> ConversationHistoryResponse:
+    """
+    Retrieve conversation history for a session.
+
+    - **session_id**: The session ID to retrieve history for
+    - **limit**: Optional limit on number of messages to return
+
+    Returns the conversation messages for the session.
+    """
+    try:
+        logger.info(f"Retrieving conversation history", session_id=session_id, user=current_user)
+
+        # Get Redis client
+        redis_client = await get_redis_client()
+
+        # Load conversation memory
+        memory = ConversationMemory(session_id=session_id, redis=redis_client)
+        await memory.load_from_redis()
+
+        # Get messages
+        messages = memory.get_messages(last_n_messages=limit)
+
+        # Convert to dict format
+        message_dicts = [
+            {
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
+            }
+            for msg in messages
+        ]
+
+        return ConversationHistoryResponse(
+            success=True,
+            session_id=session_id,
+            messages=message_dicts,
+            message_count=len(message_dicts)
+        )
+
+    except Exception as e:
+        logger.error(f"Error retrieving conversation history", session_id=session_id, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "HISTORY_RETRIEVAL_ERROR",
+                "message": str(e)
+            }
+        )
+
+
+@router.delete(
+    "/history/{session_id}",
+    response_model=SessionDeleteResponse,
+    summary="Delete conversation session",
+    description="Delete all conversation history for a specific session."
+)
+async def delete_conversation_session(
+    session_id: str,
+    current_user: str = Depends(get_current_user)
+) -> SessionDeleteResponse:
+    """
+    Delete a conversation session and all its history.
+
+    - **session_id**: The session ID to delete
+
+    Returns confirmation of deletion.
+    """
+    try:
+        logger.info(f"Deleting conversation session", session_id=session_id, user=current_user)
+
+        # Get Redis client
+        redis_client = await get_redis_client()
+
+        # Delete session data from Redis
+        session_key = f"MAI:session:{session_id}"
+        deleted = await redis_client.delete(session_key)
+
+        if deleted:
+            logger.info(f"Session deleted successfully", session_id=session_id)
+            return SessionDeleteResponse(
+                success=True,
+                session_id=session_id,
+                message="Session deleted successfully"
+            )
+        else:
+            logger.warning(f"Session not found", session_id=session_id)
+            return SessionDeleteResponse(
+                success=True,
+                session_id=session_id,
+                message="Session not found (may have already been deleted)"
+            )
+
+    except Exception as e:
+        logger.error(f"Error deleting conversation session", session_id=session_id, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "SESSION_DELETE_ERROR",
+                "message": str(e)
+            }
+        )

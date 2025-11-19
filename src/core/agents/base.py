@@ -5,7 +5,7 @@ This module provides the base class for all agents in the framework,
 integrating Pydantic AI with the MAI infrastructure (logging, auth, memory).
 """
 
-from typing import Any, Generic, AsyncIterator, TypeVar, Optional
+from typing import Any, Generic, AsyncIterator, TypeVar, Optional, Callable, List
 from dataclasses import dataclass
 import contextvars
 import time
@@ -22,6 +22,7 @@ from src.core.utils.exceptions import AgentExecutionError, ConfigurationError
 from src.infrastructure.cache.redis_client import RedisClient
 from src.infrastructure.vector_store.qdrant_client import QdrantVectorStore
 from src.core.memory.short_term import ConversationMemory
+from src.core.tools.models import ToolMetadata
 
 # Define generic type for result
 ResultT = TypeVar("ResultT", bound=BaseModel)
@@ -59,6 +60,7 @@ class BaseAgentFramework(Generic[ResultT]):
         result_type: type[ResultT],
         system_prompt: str,
         retries: int = 3,
+        tools: Optional[List[tuple[Callable[..., Any], ToolMetadata]]] = None,
     ):
         """
         Initialize the agent framework.
@@ -69,14 +71,16 @@ class BaseAgentFramework(Generic[ResultT]):
             result_type: Pydantic model class for structured output
             system_prompt: System instructions for the agent
             retries: Number of retries for failed executions
+            tools: Optional list of (callable, metadata) tuples for agent tools
         """
         self.name = name
         self.model = model
         self.result_type = result_type
         self.system_prompt = system_prompt
         self.retries = retries
+        self.tools = tools or []
         self.logger = get_logger_with_context(agent_name=name)
-        
+
         # Initialize Pydantic AI Agent
         # We use AgentDependencies as the dependency type
         self.agent = Agent(
@@ -86,6 +90,48 @@ class BaseAgentFramework(Generic[ResultT]):
             deps_type=AgentDependencies,
             retries=self.retries
         )
+
+        # Register tools with the Pydantic AI agent
+        self._register_tools()
+
+    def _register_tools(self) -> None:
+        """
+        Register tools with the Pydantic AI agent.
+
+        Pydantic AI agents support tools by decorating methods with @agent.tool decorator.
+        Since we're dynamically adding tools, we need to register them programmatically.
+        """
+        if not self.tools:
+            self.logger.debug("No tools to register for agent", agent_name=self.name)
+            return
+
+        self.logger.info(
+            f"Registering {len(self.tools)} tools for agent '{self.name}'",
+            agent_name=self.name,
+            tool_count=len(self.tools)
+        )
+
+        for tool_func, metadata in self.tools:
+            try:
+                # Register each tool with the Pydantic AI agent
+                # Pydantic AI's agent.tool() decorator returns the function unchanged
+                # but registers it internally
+                self.agent.tool()(tool_func)
+
+                self.logger.debug(
+                    f"Registered tool '{metadata.name}' with agent '{self.name}'",
+                    agent_name=self.name,
+                    tool_name=metadata.name,
+                    tool_category=metadata.category
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to register tool '{metadata.name}': {e}",
+                    agent_name=self.name,
+                    tool_name=metadata.name,
+                    error=str(e)
+                )
+                # Continue registering other tools even if one fails
 
     def validate_dependencies(self, deps: AgentDependencies) -> None:
         """
