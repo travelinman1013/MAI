@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Type
 from pydantic import BaseModel
 from src.core.agents.base import BaseAgentFramework, AgentDependencies
 from src.core.memory.short_term import ConversationMemory
