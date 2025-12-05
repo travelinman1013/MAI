@@ -1,6 +1,6 @@
 # MAI Framework
 
-Production-ready AI application framework built on Pydantic AI, designed for building reliable, type-safe AI agents with comprehensive memory management, tool orchestration, and enterprise-grade observability.
+AI application framework built on Pydantic AI, designed for building reliable, type-safe AI agents with comprehensive memory management, tool orchestration, and enterprise-grade observability.
 
 ## Architecture
 
