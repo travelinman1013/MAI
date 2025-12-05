@@ -12,9 +12,12 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
 from pydantic_ai.models.test import TestModel
+from pydantic_ai.messages import ModelMessage
 
 from src.core.agents.base import BaseAgentFramework, AgentDependencies
 from src.core.memory.short_term import ConversationMemory
+from src.core.memory.context_manager import ContextWindowManager
+from src.core.memory.history_processors import create_default_processor, limit_by_tokens, HistoryProcessor
 from src.core.models.responses import StandardResponse, ChatResponse
 from src.core.tools.models import ToolMetadata
 from src.core.utils.logging import get_logger_with_context
@@ -36,6 +39,10 @@ class ChatAgent(BaseAgentFramework):
     name = "chat_agent"
     description = "AI-powered chat agent using LM Studio or OpenAI"
 
+    # Context window configuration
+    DEFAULT_MAX_TOKENS = 4096
+    DEFAULT_RESERVE_TOKENS = 1500
+
     def __init__(
         self,
         name: str = "chat_agent",
@@ -43,8 +50,10 @@ class ChatAgent(BaseAgentFramework):
         result_type: Type[BaseModel] = ChatResponse,
         system_prompt: str = "You are a helpful AI assistant. Be concise and helpful in your responses.",
         tools: Optional[List[tuple[Callable[..., Any], ToolMetadata]]] = None,
+        history_processor: Optional[HistoryProcessor] = None,
     ):
         self._fallback_mode = model is None
+        self.history_processor = history_processor
 
         if model is None:
             # Use TestModel for fallback mode (won't actually be called)
@@ -93,25 +102,27 @@ class ChatAgent(BaseAgentFramework):
 
         # Try LLM, fall back to echo on failure
         try:
-            # Add user message to memory before LLM call
+            # Get conversation history BEFORE adding user message
+            history: Optional[List[ModelMessage]] = None
+            if conversation_memory:
+                # Get model name from deps or use default
+                model_name = getattr(self.model, 'name', lambda: 'default')() if hasattr(self.model, 'name') else 'default'
+                raw_history = conversation_memory.get_model_messages_with_limit(
+                    model_name=model_name,
+                    reserve_tokens=self.DEFAULT_RESERVE_TOKENS,
+                )
+                # Process history through the processor if configured
+                history = self.history_processor(raw_history) if self.history_processor else raw_history
+
+            # Add user message to memory
             if conversation_memory:
                 await conversation_memory.add_message(role="user", content=user_input)
 
-            # Get conversation history for context
-            current_history = []
-            if conversation_memory:
-                messages = conversation_memory.get_messages()
-                # Convert to pydantic-ai format (excluding current user message we just added)
-                for msg in messages[:-1]:  # Exclude the message we just added
-                    current_history.append({"role": msg.role, "content": msg.content})
-
-            # Call Pydantic AI agent - it returns a RunResult with .data containing the output
-            # Note: message_history requires proper ModelMessage objects, not plain dicts
-            # For now, we don't pass history - the LLM context comes from system prompt
+            # Call Pydantic AI agent with message history
             result = await self.agent.run(
                 user_input,
                 deps=deps,
-                message_history=None,  # TODO: convert to ModelMessage format if needed
+                message_history=history if history else None,
             )
 
             # result.output is a string (we use str as output_type)
@@ -120,6 +131,8 @@ class ChatAgent(BaseAgentFramework):
             # Add assistant response to memory
             if conversation_memory:
                 await conversation_memory.add_message(role="assistant", content=content)
+                # Store native model messages for future use
+                await conversation_memory.add_model_messages(result.new_messages())
 
             logger.info("LLM response generated successfully", agent=self.name)
 
@@ -155,25 +168,27 @@ class ChatAgent(BaseAgentFramework):
             return
 
         try:
-            # Add user message to memory before LLM call
+            # Get conversation history BEFORE adding user message
+            history: Optional[List[ModelMessage]] = None
+            if conversation_memory:
+                # Get model name from deps or use default
+                model_name = getattr(self.model, 'name', lambda: 'default')() if hasattr(self.model, 'name') else 'default'
+                raw_history = conversation_memory.get_model_messages_with_limit(
+                    model_name=model_name,
+                    reserve_tokens=self.DEFAULT_RESERVE_TOKENS,
+                )
+                # Process history through the processor if configured
+                history = self.history_processor(raw_history) if self.history_processor else raw_history
+
+            # Add user message to memory
             if conversation_memory:
                 await conversation_memory.add_message(role="user", content=user_input)
 
-            # Get conversation history for context
-            current_history = []
-            if conversation_memory:
-                current_history = [
-                    {"role": msg.role, "content": msg.content}
-                    for msg in conversation_memory.get_messages()
-                ]
-
-            # Stream from Pydantic AI agent
-            # Note: message_history requires proper ModelMessage objects, not dicts
-            # For now, we don't pass history to streaming - the LLM context comes from system prompt
+            # Stream from Pydantic AI agent with message history
             async with self.agent.run_stream(
                 user_input,
                 deps=deps,
-                message_history=None,  # TODO: convert to ModelMessage format if needed
+                message_history=history if history else None,
             ) as result:
                 # pydantic-ai 1.x stream() yields accumulated text, not deltas
                 # Track previous text to extract only the new portion (delta)
@@ -194,6 +209,8 @@ class ChatAgent(BaseAgentFramework):
                 await conversation_memory.add_message(
                     role="assistant", content=full_response
                 )
+                # Store native model messages for future use
+                await conversation_memory.add_model_messages(result.new_messages())
 
             logger.info("LLM streaming completed successfully", agent=self.name)
 
