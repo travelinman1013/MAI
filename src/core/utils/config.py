@@ -14,6 +14,43 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class LLMProviderSettings(BaseSettings):
+    """LLM Provider selection configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="LLM__", env_nested_delimiter="__", extra="ignore"
+    )
+
+    provider: str = Field(
+        default="auto",
+        description="LLM provider to use: 'openai', 'lmstudio', or 'auto' (auto-detect)",
+    )
+
+    @field_validator("provider")
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        """Validate provider selection."""
+        allowed = {"openai", "lmstudio", "auto"}
+        v_lower = v.lower()
+        if v_lower not in allowed:
+            raise ValueError(f"LLM provider must be one of {allowed}")
+        return v_lower
+
+
+class OpenAISettings(BaseSettings):
+    """OpenAI API configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="OPENAI__", env_nested_delimiter="__", extra="ignore"
+    )
+
+    api_key: Optional[str] = Field(default=None, description="OpenAI API key")
+    model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
+    max_tokens: int = Field(default=2048, description="Maximum tokens in response")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
+    timeout: int = Field(default=60, ge=1, description="Request timeout in seconds")
+
+
 class LMStudioSettings(BaseSettings):
     """LM Studio configuration."""
 
@@ -211,6 +248,8 @@ class Settings(BaseSettings):
     )
 
     # Component settings (nested)
+    llm: LLMProviderSettings = Field(default_factory=LLMProviderSettings)
+    openai: OpenAISettings = Field(default_factory=OpenAISettings)
     lm_studio: LMStudioSettings = Field(default_factory=LMStudioSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)

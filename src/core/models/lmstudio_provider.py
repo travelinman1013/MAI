@@ -12,8 +12,7 @@ This module provides integration with LM Studio's OpenAI-compatible API:
 from typing import Optional
 
 import httpx
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.models.openai import OpenAIModel
 
 from src.core.utils.config import LMStudioSettings, get_settings
 from src.core.utils.exceptions import ModelError
@@ -127,7 +126,7 @@ def create_lmstudio_model(
     model_name: Optional[str] = None,
     settings: Optional[LMStudioSettings] = None,
     auto_detect: bool = True,
-) -> OpenAIChatModel:
+) -> OpenAIModel:
     """Create LM Studio model instance for Pydantic AI.
 
     This factory function creates an OpenAI-compatible model configured for LM Studio.
@@ -139,7 +138,7 @@ def create_lmstudio_model(
         auto_detect: If True and model_name is None, auto-detect model from LM Studio.
 
     Returns:
-        Configured OpenAIChatModel instance for LM Studio
+        Configured OpenAIModel instance for LM Studio
 
     Raises:
         ModelError: If model detection fails when auto_detect=True
@@ -175,16 +174,11 @@ def create_lmstudio_model(
     # Use provided model name or default from settings
     final_model_name = model_name or lm_settings.model_name
 
-    # Create OpenAI provider configured for LM Studio
-    provider = OpenAIProvider(
+    # Create and return OpenAI-compatible model configured for LM Studio
+    model = OpenAIModel(
+        final_model_name,
         base_url=lm_settings.base_url,
         api_key=lm_settings.api_key,  # Usually "not-needed" for LM Studio
-    )
-
-    # Create and return OpenAI-compatible model
-    model = OpenAIChatModel(
-        model_name=final_model_name,
-        provider=provider,
     )
 
     logger.info(
@@ -201,7 +195,7 @@ async def create_lmstudio_model_async(
     settings: Optional[LMStudioSettings] = None,
     auto_detect: bool = True,
     test_connection: bool = True,
-) -> OpenAIChatModel:
+) -> OpenAIModel:
     """Create LM Studio model with async model detection and connection testing.
 
     This is the async version of create_lmstudio_model that supports auto-detection
@@ -214,7 +208,7 @@ async def create_lmstudio_model_async(
         test_connection: If True, test connection to LM Studio before returning model.
 
     Returns:
-        Configured OpenAIChatModel instance for LM Studio
+        Configured OpenAIModel instance for LM Studio
 
     Raises:
         ModelError: If model detection or connection test fails
@@ -274,7 +268,7 @@ async def create_lmstudio_model_async(
 
 def get_lmstudio_model(
     model_name: Optional[str] = None, settings: Optional[LMStudioSettings] = None
-) -> OpenAIChatModel:
+) -> OpenAIModel:
     """Get LM Studio model instance (sync, no auto-detection).
 
     This is a convenience wrapper around create_lmstudio_model for synchronous usage.
@@ -284,7 +278,7 @@ def get_lmstudio_model(
         settings: LM Studio configuration. If None, uses global settings.
 
     Returns:
-        Configured OpenAIChatModel instance
+        Configured OpenAIModel instance
 
     Example:
         ```python
@@ -302,7 +296,7 @@ async def get_lmstudio_model_async(
     model_name: Optional[str] = None,
     settings: Optional[LMStudioSettings] = None,
     auto_detect: bool = True,
-) -> OpenAIChatModel:
+) -> OpenAIModel:
     """Get LM Studio model instance (async, with optional auto-detection).
 
     This is a convenience wrapper around create_lmstudio_model_async.
@@ -313,7 +307,7 @@ async def get_lmstudio_model_async(
         auto_detect: If True and model_name is None, auto-detect model.
 
     Returns:
-        Configured OpenAIChatModel instance
+        Configured OpenAIModel instance
 
     Example:
         ```python

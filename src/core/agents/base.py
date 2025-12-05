@@ -85,7 +85,7 @@ class BaseAgentFramework(Generic[ResultT]):
         # We use AgentDependencies as the dependency type
         self.agent = Agent(
             model=self.model,
-            output_type=self.result_type,
+            result_type=self.result_type,
             system_prompt=self.system_prompt,
             deps_type=AgentDependencies,
             retries=self.retries

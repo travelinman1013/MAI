@@ -21,7 +21,7 @@ from src.infrastructure.cache.redis_client import get_redis_client
 from src.core.agents.registry import agent_registry
 from src.core.tools.registry import tool_registry
 from src.core.models.responses import ChatResponse
-from src.core.models.lmstudio_provider import create_lmstudio_model_async
+from src.core.models.providers import get_model_provider_async
 from src.api.schemas.agents import (
     AgentRunRequest,
     AgentStreamRequest,
@@ -38,9 +38,45 @@ router = APIRouter()
 logger = get_logger_with_context(module="agent_routes")
 
 
+@router.get(
+    "/",
+    summary="List all agents",
+    description="Get a list of all registered agents with their descriptions."
+)
+async def list_agents():
+    """
+    List all available agents.
+
+    Returns list of agent names and descriptions.
+    """
+    try:
+        agents_dict = agent_registry.list_agents()
+
+        agents_list = []
+        for name, agent_class in agents_dict.items():
+            agents_list.append({
+                "name": name,
+                "description": getattr(agent_class, "description", "No description"),
+            })
+
+        return {
+            "success": True,
+            "agents": agents_list,
+            "count": len(agents_list)
+        }
+
+    except Exception as e:
+        logger.error(f"Error listing agents: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error_code": "AGENT_LIST_ERROR", "message": str(e)}
+        )
+
+
 async def _create_agent_instance(
     agent_name: str,
-    tools_enabled: bool = True
+    tools_enabled: bool = True,
+    require_model: bool = False,
 ) -> BaseAgentFramework:
     """
     Create an agent instance with proper model and tool configuration.
@@ -48,21 +84,32 @@ async def _create_agent_instance(
     Args:
         agent_name: Name of the agent to create
         tools_enabled: Whether to load and register tools with the agent
+        require_model: If True, require a valid LLM model; if False, model is optional
 
     Returns:
         Configured agent instance
 
     Raises:
         ValueError: If agent not found in registry
-        ModelError: If LM Studio model creation fails
+        ModelError: If LM Studio model creation fails and require_model is True
     """
     # Get agent class from registry
     AgentClass = agent_registry.get_agent(agent_name)
     if not AgentClass:
         raise ValueError(f"Agent '{agent_name}' not found in registry")
 
-    # Create LM Studio model
-    model = await create_lmstudio_model_async(auto_detect=True, test_connection=False)
+    # Try to get model from configured provider (OpenAI or LM Studio)
+    # Some agents (like SimpleAgent) don't need a real model
+    model = None
+    try:
+        model = await get_model_provider_async()
+    except Exception as e:
+        if require_model:
+            raise
+        logger.warning(
+            f"Could not create model provider for agent '{agent_name}': {e}. "
+            "Agent will run without LLM model."
+        )
 
     # Get tools if enabled
     tools = None
@@ -74,13 +121,12 @@ async def _create_agent_instance(
 
     # Create agent instance
     # Note: AgentClass should have a factory method or accept these parameters
-    # For now, we'll create a generic instance
     agent_instance = AgentClass(
         name=agent_name,
         model=model,
         result_type=ChatResponse,
         system_prompt=f"You are a helpful AI assistant named {agent_name}.",
-        tools=tools
+        tools=tools,
     )
 
     return agent_instance
@@ -180,12 +226,18 @@ async def run_agent(
         )
 
     except Exception as e:
-        logger.error(f"Unexpected error in agent execution", agent_name=agent_name, error=str(e))
+        import traceback
+        logger.error(
+            f"Unexpected error in agent execution",
+            agent_name=agent_name,
+            error=str(e),
+            traceback=traceback.format_exc()
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error_code": "INTERNAL_ERROR",
-                "message": "An unexpected error occurred",
+                "message": f"An unexpected error occurred: {str(e)}",
                 "retryable": False
             }
         )
@@ -248,7 +300,10 @@ async def stream_agent(
                     chunk_count += 1
 
                     # Extract content from chunk
-                    if hasattr(chunk, 'content'):
+                    # StandardResponse has data.content, ChatResponse has content directly
+                    if hasattr(chunk, 'data') and hasattr(chunk.data, 'content'):
+                        content = chunk.data.content
+                    elif hasattr(chunk, 'content'):
                         content = chunk.content
                     elif hasattr(chunk, 'data'):
                         content = chunk.data.get('content', '') if isinstance(chunk.data, dict) else str(chunk.data)
@@ -399,7 +454,9 @@ async def delete_conversation_session(
         redis_client = await get_redis_client()
 
         # Delete session data from Redis
-        session_key = f"MAI:session:{session_id}"
+        # Note: The key uses ConversationMemory.REDIS_KEY_PREFIX = "conversation_memory:"
+        # The RedisClient will add "MAI:" prefix, so we just use the memory key format
+        session_key = f"conversation_memory:{session_id}"
         deleted = await redis_client.delete(session_key)
 
         if deleted:

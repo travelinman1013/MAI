@@ -121,16 +121,24 @@ class ConversationMemory:
 
     async def load_from_redis(self):
         try:
-            messages_json = await self.redis.get(self._get_redis_key())
-            if messages_json:
-                self.messages = self._message_adapter.validate_json(messages_json)
+            messages_data = await self.redis.get(self._get_redis_key())
+            if messages_data:
+                # RedisClient.get() returns deserialized Python objects if JSON is valid
+                # So messages_data could be either a string (JSON) or a list (already parsed)
+                if isinstance(messages_data, str):
+                    self.messages = self._message_adapter.validate_json(messages_data)
+                elif isinstance(messages_data, list):
+                    self.messages = self._message_adapter.validate_python(messages_data)
+                else:
+                    logger.warning(f"Unexpected data type from Redis for session {self.session_id}: {type(messages_data)}")
+                    self.messages = []
                 logger.debug(f"Conversation memory for session {self.session_id} loaded from Redis. {len(self.messages)} messages.")
             else:
                 self.messages = []
                 logger.debug(f"No conversation memory found in Redis for session {self.session_id}.")
         except (json.JSONDecodeError, ValidationError, TypeError) as e:
             logger.error(f"Failed to load or parse conversation memory from Redis for session {self.session_id}: {e}")
-            self.messages = [] # Clear messages on error to prevent corrupted state
+            self.messages = []  # Clear messages on error to prevent corrupted state
         except Exception as e:
             logger.error(f"An unexpected error occurred while loading conversation memory for session {self.session_id}: {e}")
-            self.messages = [] # Clear messages on error
+            self.messages = []  # Clear messages on error
