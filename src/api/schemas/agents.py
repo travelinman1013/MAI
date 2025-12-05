@@ -201,3 +201,22 @@ class AgentErrorResponse(BaseModel):
                 "timestamp": "2025-11-19T19:30:00Z"
             }
         }
+
+
+class LLMStatusResponse(BaseModel):
+    """Response schema for LLM connection status."""
+
+    provider: str = Field(..., description="LLM provider name (lmstudio, openai, none)")
+    connected: bool = Field(..., description="Whether LLM is connected and available")
+    model_name: Optional[str] = Field(None, description="Name of the loaded model if connected")
+    error: Optional[str] = Field(None, description="Error message if not connected")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "provider": "lmstudio",
+                "connected": True,
+                "model_name": "google/gemma-3-12b",
+                "error": None
+            }
+        }

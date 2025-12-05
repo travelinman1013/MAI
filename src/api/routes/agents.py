@@ -31,7 +31,8 @@ from src.api.schemas.agents import (
     SessionDeleteResponse,
     AgentErrorResponse,
     ErrorDetail,
-    ToolCallInfo
+    ToolCallInfo,
+    LLMStatusResponse,
 )
 
 router = APIRouter()
@@ -70,6 +71,67 @@ async def list_agents():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error_code": "AGENT_LIST_ERROR", "message": str(e)}
+        )
+
+
+@router.get(
+    "/llm-status",
+    response_model=LLMStatusResponse,
+    summary="Get LLM connection status",
+    description="Check if the LLM provider is connected and what model is loaded."
+)
+async def get_llm_status() -> LLMStatusResponse:
+    """
+    Get LLM connection status.
+
+    Returns information about the configured LLM provider and whether it's connected.
+    """
+    from src.core.utils.config import get_settings
+    from src.core.models.lmstudio_provider import lmstudio_health_check
+
+    settings = get_settings()
+    provider = settings.llm.provider
+
+    try:
+        if provider == "lmstudio":
+            health = await lmstudio_health_check()
+            return LLMStatusResponse(
+                provider="lmstudio",
+                connected=health.get("connected", False),
+                model_name=health.get("model_id"),
+                error=health.get("error"),
+            )
+        elif provider == "openai":
+            # For OpenAI, check if API key is configured
+            if settings.openai.api_key:
+                return LLMStatusResponse(
+                    provider="openai",
+                    connected=True,
+                    model_name=settings.openai.model,
+                    error=None,
+                )
+            else:
+                return LLMStatusResponse(
+                    provider="openai",
+                    connected=False,
+                    model_name=None,
+                    error="OpenAI API key not configured",
+                )
+        else:
+            return LLMStatusResponse(
+                provider=provider or "none",
+                connected=False,
+                model_name=None,
+                error=f"Unknown provider: {provider}",
+            )
+
+    except Exception as e:
+        logger.error(f"Error checking LLM status: {e}")
+        return LLMStatusResponse(
+            provider=provider or "unknown",
+            connected=False,
+            model_name=None,
+            error=str(e),
         )
 
 

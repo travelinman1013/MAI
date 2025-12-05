@@ -31,7 +31,9 @@ async def get_agents_list() -> dict:
     """Fetch available agents for dropdown."""
     try:
         agents = await mai_client.list_agents()
-        return gr.Dropdown(choices=agents, value=agents[0] if agents else gui_settings.default_agent)
+        # Use configured default if available, otherwise first agent
+        default = gui_settings.default_agent if gui_settings.default_agent in agents else (agents[0] if agents else gui_settings.default_agent)
+        return gr.Dropdown(choices=agents, value=default)
     except Exception:
         return gr.Dropdown(choices=[gui_settings.default_agent], value=gui_settings.default_agent)
 
@@ -39,13 +41,42 @@ async def get_agents_list() -> dict:
 async def check_connection() -> str:
     """Check API connection status."""
     health = await mai_client.health_check()
+    llm_status = await mai_client.get_llm_status()
+
+    parts = []
+
     if health.get("status") == "healthy":
-        services = health.get("services", {})
-        service_status = ", ".join(f"{k}: {'OK' if v else 'X'}" for k, v in services.items())
-        return f"[Connected] | {service_status}" if service_status else "[Connected]"
+        parts.append("[Connected]")
     else:
         error = health.get("error", "Unknown error")
         return f"[Disconnected]: {error}"
+
+    # LLM status
+    if llm_status.get("connected"):
+        model_name = llm_status.get("model_name", "unknown")
+        # Shorten model name if too long
+        if len(model_name) > 25:
+            model_name = model_name[:22] + "..."
+        parts.append(f"LLM: OK ({model_name})")
+    else:
+        parts.append("LLM: X (fallback mode)")
+
+    # Other services
+    services = health.get("services", {})
+    for k, v in services.items():
+        if k != "llm":  # Skip LLM since we handle it separately
+            parts.append(f"{k}: {'OK' if v else 'X'}")
+
+    return " | ".join(parts)
+
+
+async def check_llm_warning() -> str:
+    """Check if LLM is unavailable and return warning message."""
+    llm_status = await mai_client.get_llm_status()
+    if not llm_status.get("connected"):
+        error = llm_status.get("error", "LLM unavailable")
+        return f"**Warning:** LLM unavailable - responses are in echo mode. ({error})"
+    return ""
 
 
 async def stream_response(
@@ -155,6 +186,9 @@ def create_chat_interface() -> gr.Blocks:
         # Status bar
         status_bar = gr.Markdown("Checking connection...")
 
+        # LLM warning banner (hidden by default)
+        llm_warning = gr.Markdown("", visible=True)
+
         # Agent and session controls
         with gr.Row():
             agent_selector = gr.Dropdown(
@@ -205,6 +239,7 @@ def create_chat_interface() -> gr.Blocks:
         # Load agents and check connection on page load
         demo.load(get_agents_list, outputs=[agent_selector])
         demo.load(check_connection, outputs=[status_bar])
+        demo.load(check_llm_warning, outputs=[llm_warning])
 
         # Session management
         load_btn.click(
@@ -249,6 +284,7 @@ def main() -> None:
     demo = create_chat_interface()
     demo.queue()  # Enable queuing for streaming
     demo.launch(
+        server_name="0.0.0.0",  # Bind to all interfaces for Docker
         server_port=gui_settings.server_port,
         share=False,
         show_error=True,

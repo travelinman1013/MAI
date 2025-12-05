@@ -150,6 +150,26 @@ class MAIClient:
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 
+    async def get_llm_status(self) -> dict[str, Any]:
+        """Get LLM connection status.
+
+        Returns:
+            LLM status dict with provider, connected, model_name, error
+        """
+        try:
+            url = f"{self.base_url}/agents/llm-status"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            return {
+                "provider": "unknown",
+                "connected": False,
+                "model_name": None,
+                "error": str(e),
+            }
+
 
 # Singleton instance
 mai_client = MAIClient()
