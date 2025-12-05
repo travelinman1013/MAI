@@ -1,0 +1,74 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: mai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - mai-network
+
+  mai-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mai-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS__URL=redis://redis:6379/0
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - LLM__PROVIDER=lmstudio
+      - LM_STUDIO__BASE_URL=http://host.docker.internal:1234/v1
+      - LM_STUDIO__MODEL_NAME=google/gemma-3-12b
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - mai-network
+
+  mai-gui:
+    build:
+      context: .
+      dockerfile: Dockerfile.gui
+    container_name: mai-gui
+    ports:
+      - "7860:7860"
+    environment:
+      - GUI_API_BASE_URL=http://mai-api:8000/api/v1
+    depends_on:
+      mai-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - mai-network
+
+networks:
+  mai-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local
