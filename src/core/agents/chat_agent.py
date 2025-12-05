@@ -11,6 +11,7 @@ from typing import Any, Type, AsyncIterator, Optional, List, Callable
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
+from pydantic_ai.models.test import TestModel
 
 from src.core.agents.base import BaseAgentFramework, AgentDependencies
 from src.core.memory.short_term import ConversationMemory
@@ -46,8 +47,8 @@ class ChatAgent(BaseAgentFramework):
         self._fallback_mode = model is None
 
         if model is None:
-            # Use a placeholder for fallback mode
-            model = "dummy-model"
+            # Use TestModel for fallback mode (won't actually be called)
+            model = TestModel()
 
         # Call parent init to set up common properties
         super().__init__(
@@ -58,13 +59,14 @@ class ChatAgent(BaseAgentFramework):
             tools=tools,
         )
 
-        # Override the agent to use str result_type instead of complex model
+        # Override the agent to use str output_type instead of complex model
         # This fixes "Exceeded maximum retries for result validation" errors
         # because the LLM returns plain text, not structured JSON
+        # Note: pydantic-ai 1.x renamed result_type to output_type
         if not self._fallback_mode:
             self.agent = Agent(
                 model=self.model,
-                result_type=str,  # Simple string - LLM returns text, we wrap it
+                output_type=str,  # Simple string - LLM returns text, we wrap it
                 system_prompt=self.system_prompt,
                 deps_type=AgentDependencies,
                 retries=self.retries,
@@ -112,8 +114,8 @@ class ChatAgent(BaseAgentFramework):
                 message_history=None,  # TODO: convert to ModelMessage format if needed
             )
 
-            # result.data is now a string (we use str as result_type)
-            content = result.data
+            # result.output is a string (we use str as output_type)
+            content = result.output
 
             # Add assistant response to memory
             if conversation_memory:

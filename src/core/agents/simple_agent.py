@@ -1,6 +1,7 @@
 from typing import Any, Type, AsyncIterator, Optional, List, Callable
 from pydantic import BaseModel
 from pydantic_ai.models import Model
+from pydantic_ai.models.test import TestModel
 from src.core.agents.base import BaseAgentFramework, AgentDependencies
 from src.core.memory.short_term import ConversationMemory
 from src.core.models.responses import StandardResponse, ChatResponse
@@ -25,12 +26,12 @@ class SimpleAgent(BaseAgentFramework):
         system_prompt: str = "You are a helpful AI assistant.",
         tools: Optional[List[tuple[Callable[..., Any], ToolMetadata]]] = None,
     ):
-        # If no model provided, use a dummy string that won't be used
+        # If no model provided, use TestModel that won't be used
         # since we override run_async to not use the model
         self._skip_model = model is None
         if model is None:
-            # Use a placeholder - we won't actually use it since we override run_async
-            model = "dummy-model"
+            # Use TestModel - we won't actually use it since we override run_async
+            model = TestModel()
 
         super().__init__(
             name=name,

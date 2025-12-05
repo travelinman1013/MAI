@@ -1,65 +1,259 @@
 """Gradio chat interface for MAI agents."""
 
+from collections.abc import AsyncGenerator
+
 import gradio as gr
 
+from src.gui.api_client import mai_client
 from src.gui.config import gui_settings
+from src.gui.session import format_history_for_gradio, generate_session_id
+
+
+# Custom CSS for polished appearance
+CUSTOM_CSS = """
+.gradio-container {
+    max-width: 900px !important;
+    margin: auto !important;
+}
+footer {
+    display: none !important;
+}
+.status-connected {
+    color: #22c55e;
+}
+.status-disconnected {
+    color: #ef4444;
+}
+"""
+
+
+async def get_agents_list() -> dict:
+    """Fetch available agents for dropdown."""
+    try:
+        agents = await mai_client.list_agents()
+        return gr.Dropdown(choices=agents, value=agents[0] if agents else gui_settings.default_agent)
+    except Exception:
+        return gr.Dropdown(choices=[gui_settings.default_agent], value=gui_settings.default_agent)
+
+
+async def check_connection() -> str:
+    """Check API connection status."""
+    health = await mai_client.health_check()
+    if health.get("status") == "healthy":
+        services = health.get("services", {})
+        service_status = ", ".join(f"{k}: {'OK' if v else 'X'}" for k, v in services.items())
+        return f"[Connected] | {service_status}" if service_status else "[Connected]"
+    else:
+        error = health.get("error", "Unknown error")
+        return f"[Disconnected]: {error}"
+
+
+async def stream_response(
+    message: str,
+    history: list,
+    session_id: str,
+    agent_name: str,
+) -> AsyncGenerator[tuple[str, list], None]:
+    """Stream a response from the agent.
+
+    Args:
+        message: User's message
+        history: Chat history
+        session_id: Session ID for conversation continuity
+        agent_name: Name of the agent to use
+
+    Yields:
+        Tuple of (empty string for input, updated history)
+    """
+    if not message.strip():
+        yield "", history
+        return
+
+    # Add user message to history
+    history = history or []
+    history.append({"role": "user", "content": message})
+
+    # Add empty assistant message that we'll update
+    history.append({"role": "assistant", "content": ""})
+
+    try:
+        # Stream the response
+        async for chunk in mai_client.stream_chat(
+            message=message,
+            agent_name=agent_name,
+            session_id=session_id,
+        ):
+            history[-1]["content"] += chunk
+            yield "", history
+
+    except Exception as e:
+        error_msg = str(e)
+        if "Connection" in error_msg or "refused" in error_msg.lower():
+            history[-1]["content"] = "Cannot connect to MAI API. Is the server running?"
+        else:
+            history[-1]["content"] = f"Error: {error_msg}"
+        yield "", history
+
+
+async def load_session_history(session_id: str) -> tuple[list, str]:
+    """Load conversation history for a session.
+
+    Args:
+        session_id: The session ID to load history for
+
+    Returns:
+        Tuple of (history list, feedback message)
+    """
+    if not session_id:
+        return [], "No session ID provided"
+    try:
+        api_messages = await mai_client.get_history(session_id)
+        history = format_history_for_gradio(api_messages)
+        if history:
+            return history, f"Loaded {len(history)} messages"
+        return [], "No history found for this session"
+    except Exception as e:
+        return [], f"Error loading history: {e}"
+
+
+async def clear_session(session_id: str) -> tuple[str, list, str, str]:
+    """Clear the current session and start fresh.
+
+    Args:
+        session_id: The session ID to clear
+
+    Returns:
+        Tuple of (new session ID, empty history, session info text, feedback)
+    """
+    if session_id:
+        try:
+            await mai_client.clear_history(session_id)
+        except Exception:
+            pass
+    new_session_id = generate_session_id()
+    return new_session_id, [], f"Session: `{new_session_id}`", "Session cleared"
+
+
+async def new_session() -> tuple[str, list, str, str]:
+    """Start a new session without clearing old one.
+
+    Returns:
+        Tuple of (new session ID, empty history, session info text, feedback)
+    """
+    new_session_id = generate_session_id()
+    return new_session_id, [], f"Session: `{new_session_id}`", "New session started"
 
 
 def create_chat_interface() -> gr.Blocks:
     """Create the Gradio chat interface."""
+    initial_session_id = generate_session_id()
 
     with gr.Blocks(title=gui_settings.app_title) as demo:
         gr.Markdown(f"# {gui_settings.app_title}")
         gr.Markdown("Chat with MAI agents powered by Pydantic AI")
 
+        # Status bar
+        status_bar = gr.Markdown("Checking connection...")
+
+        # Agent and session controls
+        with gr.Row():
+            agent_selector = gr.Dropdown(
+                label="Agent",
+                choices=[gui_settings.default_agent],
+                value=gui_settings.default_agent,
+                interactive=True,
+                scale=1,
+            )
+            session_id = gr.Textbox(
+                label="Session ID",
+                value=initial_session_id,
+                interactive=True,
+                scale=2,
+            )
+            load_btn = gr.Button("Load", scale=1)
+            new_btn = gr.Button("New", scale=1)
+
+        # Feedback message
+        feedback = gr.Markdown("")
+
+        # Chat interface
         chatbot = gr.Chatbot(
             label="Conversation",
-            height=500,
-            type="messages",  # Use OpenAI-style message format
+            height=450,
+            buttons=["copy", "copy_all"],
         )
 
-        msg = gr.Textbox(
-            label="Message",
-            placeholder="Type your message here...",
-            lines=2,
-        )
-
+        # Message input
         with gr.Row():
-            submit_btn = gr.Button("Send", variant="primary")
-            clear_btn = gr.Button("Clear")
+            msg = gr.Textbox(
+                label="Message",
+                placeholder="Type your message here... (Enter to send)",
+                lines=2,
+                scale=4,
+            )
+            submit_btn = gr.Button("Send", variant="primary", scale=1)
 
-        # Placeholder function - will be implemented in next step
-        def respond(message: str, history: list) -> tuple[str, list]:
-            """Placeholder response function."""
-            # Add user message to history
-            history = history or []
-            history.append({"role": "user", "content": message})
-            # Add placeholder assistant response
-            history.append({"role": "assistant", "content": f"[Placeholder] You said: {message}"})
-            return "", history
+        # Action buttons
+        with gr.Row():
+            clear_btn = gr.Button("Clear Chat", variant="secondary")
 
-        # Wire up the interface
+        # Session info footer
+        session_info = gr.Markdown(f"Session: `{initial_session_id}`")
+
+        # --- Event Handlers ---
+
+        # Load agents and check connection on page load
+        demo.load(get_agents_list, outputs=[agent_selector])
+        demo.load(check_connection, outputs=[status_bar])
+
+        # Session management
+        load_btn.click(
+            load_session_history,
+            inputs=[session_id],
+            outputs=[chatbot, feedback],
+        )
+        new_btn.click(
+            new_session,
+            outputs=[session_id, chatbot, session_info, feedback],
+        )
+        clear_btn.click(
+            clear_session,
+            inputs=[session_id],
+            outputs=[session_id, chatbot, session_info, feedback],
+        )
+
+        # Chat submission
         submit_btn.click(
-            respond,
-            inputs=[msg, chatbot],
+            stream_response,
+            inputs=[msg, chatbot, session_id, agent_selector],
             outputs=[msg, chatbot],
         )
         msg.submit(
-            respond,
-            inputs=[msg, chatbot],
+            stream_response,
+            inputs=[msg, chatbot, session_id, agent_selector],
             outputs=[msg, chatbot],
         )
-        clear_btn.click(lambda: ("", []), outputs=[msg, chatbot])
 
-    return demo
+        # Update session info display
+        session_id.change(
+            lambda sid: f"Session: `{sid}`",
+            inputs=[session_id],
+            outputs=[session_info],
+        )
+
+    return demo  # type: ignore[no-any-return]
 
 
 def main() -> None:
     """Launch the Gradio interface."""
     demo = create_chat_interface()
+    demo.queue()  # Enable queuing for streaming
     demo.launch(
         server_port=gui_settings.server_port,
         share=False,
+        show_error=True,
+        css=CUSTOM_CSS,
+        theme=gr.themes.Soft(),
     )
 
 

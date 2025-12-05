@@ -83,9 +83,10 @@ class BaseAgentFramework(Generic[ResultT]):
 
         # Initialize Pydantic AI Agent
         # We use AgentDependencies as the dependency type
+        # Note: pydantic-ai 1.x renamed result_type to output_type
         self.agent = Agent(
             model=self.model,
-            result_type=self.result_type,
+            output_type=self.result_type,
             system_prompt=self.system_prompt,
             deps_type=AgentDependencies,
             retries=self.retries
