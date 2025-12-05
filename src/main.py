@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from src.api.routes import api_router
 from src.core.agents.registry import agent_registry
 from src.core.agents.simple_agent import SimpleAgent
+from src.core.agents.chat_agent import ChatAgent
 from src.core.tools import examples as tool_examples  # Import to register tools
 from src.core.tools.registry import tool_registry
 
@@ -68,6 +69,7 @@ async def lifespan(app: FastAPI):
 
     # Register agents on startup
     agent_registry.register_agent(SimpleAgent)
+    agent_registry.register_agent(ChatAgent)
     print(f"Startup: Agents registered ({len(agent_registry.list_agents())} agents)")
 
     # Tools are auto-registered when imported
