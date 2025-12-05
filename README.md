@@ -2,6 +2,81 @@
 
 Production-ready AI application framework built on Pydantic AI, designed for building reliable, type-safe AI agents with comprehensive memory management, tool orchestration, and enterprise-grade observability.
 
+## Architecture
+
+```
+                                    MAI Framework Architecture
+
+    +-----------------------------------------------------------------------------------+
+    |                                   CLIENT LAYER                                    |
+    |  +-------------+  +-------------+  +-------------+  +-------------------------+   |
+    |  |   Web App   |  |  Mobile App |  |     CLI     |  |   External Services     |   |
+    |  +------+------+  +------+------+  +------+------+  +-----------+-------------+   |
+    +---------|-----------------|-----------------|-----------------------|--------------+
+              |                 |                 |                       |
+              v                 v                 v                       v
+    +-----------------------------------------------------------------------------------+
+    |                                    API LAYER                                      |
+    |  +-----------------------------------------------------------------------------+  |
+    |  |                         FastAPI Application (:8000)                         |  |
+    |  |  +------------------+  +------------------+  +------------------+           |  |
+    |  |  | /api/v1/agents/* |  | /api/v1/memory/* |  |    /health       |           |  |
+    |  |  |  - run/{name}    |  |  - history       |  |    /metrics      |           |  |
+    |  |  |  - stream/{name} |  |  - search        |  |                  |           |  |
+    |  |  +------------------+  +------------------+  +------------------+           |  |
+    |  +-----------------------------------------------------------------------------+  |
+    +-----------------------------------------------------------------------------------+
+                                            |
+                                            v
+    +-----------------------------------------------------------------------------------+
+    |                                   CORE LAYER                                      |
+    |                                                                                   |
+    |  +---------------------------+  +---------------------------+                     |
+    |  |      Agent Framework      |  |      Tool Registry        |                     |
+    |  |  +---------------------+  |  |  +---------------------+  |                     |
+    |  |  | BaseAgentFramework  |  |  |  | @tool decorator     |  |                     |
+    |  |  | ChatAgent           |  |  |  | Tool validation     |  |                     |
+    |  |  | SimpleAgent         |  |  |  | Auto-registration   |  |                     |
+    |  |  +---------------------+  |  |  +---------------------+  |                     |
+    |  +---------------------------+  +---------------------------+                     |
+    |                                                                                   |
+    |  +---------------------------+  +---------------------------+                     |
+    |  |     Memory Manager        |  |    Prompt Manager         |                     |
+    |  |  +---------------------+  |  |  +---------------------+  |                     |
+    |  |  | Short-term (Redis)  |  |  |  | Jinja2 templates    |  |                     |
+    |  |  | Long-term (Postgres)|  |  |  | YAML storage        |  |                     |
+    |  |  | Semantic (Qdrant)   |  |  |  | Variable injection  |  |                     |
+    |  |  +---------------------+  |  |  +---------------------+  |                     |
+    |  +---------------------------+  +---------------------------+                     |
+    +-----------------------------------------------------------------------------------+
+                                            |
+                                            v
+    +-----------------------------------------------------------------------------------+
+    |                              INFRASTRUCTURE LAYER                                 |
+    |                                                                                   |
+    |  +---------------+  +---------------+  +---------------+  +-------------------+   |
+    |  |    Redis      |  |  PostgreSQL   |  |    Qdrant     |  |    LM Studio      |   |
+    |  |   (:6379)     |  |   (:5432)     |  |   (:6333)     |  |    (:1234)        |   |
+    |  |               |  |               |  |               |  |                   |   |
+    |  | - Sessions    |  | - User data   |  | - Embeddings  |  | - Local LLMs      |   |
+    |  | - Cache       |  | - Long-term   |  | - Semantic    |  | - OpenAI-compat   |   |
+    |  | - Pub/Sub     |  |   memory      |  |   search      |  | - Gemma, Llama    |   |
+    |  | - Rate limits |  | - pgvector    |  | - RAG support |  |   Mistral, etc.   |   |
+    |  +---------------+  +---------------+  +---------------+  +-------------------+   |
+    |                                                                                   |
+    +-----------------------------------------------------------------------------------+
+
+    Data Flow:
+    =========
+    1. Client sends request to FastAPI endpoint
+    2. API routes to appropriate agent via Agent Registry
+    3. Agent loads conversation context from Redis (short-term memory)
+    4. Agent queries Qdrant for relevant semantic context (RAG)
+    5. Agent sends prompt to LM Studio for LLM inference
+    6. Response streams back through SSE or returns as JSON
+    7. Conversation persisted to Redis, important data to PostgreSQL
+```
+
 ## Features
 
 - **Type-Safe AI Agents**: Built on Pydantic AI for robust, validated agent interactions
