@@ -30,6 +30,7 @@ numpy = "^2.1"
 psutil = "^6.0"
 click = "^8.1"
 rich = "^13.7"
+gradio = "^5.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"
@@ -50,6 +51,7 @@ mkdocstrings = {extras = ["python"], version = "^0.26"}
 
 [tool.poetry.scripts]
 mai = "src.cli:main"
+mai-gui = "src.gui.app:main"
 
 [build-system]
 requires = ["poetry-core"]
