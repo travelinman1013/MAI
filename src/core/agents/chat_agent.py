@@ -170,18 +170,24 @@ class ChatAgent(BaseAgentFramework):
             # Stream from Pydantic AI agent
             # Note: message_history requires proper ModelMessage objects, not dicts
             # For now, we don't pass history to streaming - the LLM context comes from system prompt
-            full_response = ""
             async with self.agent.run_stream(
                 user_input,
                 deps=deps,
                 message_history=None,  # TODO: convert to ModelMessage format if needed
             ) as result:
+                # pydantic-ai 1.x stream() yields accumulated text, not deltas
+                # Track previous text to extract only the new portion (delta)
+                previous_text = ""
                 async for chunk in result.stream():
-                    chunk_str = str(chunk)
-                    full_response += chunk_str
-                    yield StandardResponse(
-                        data=ChatResponse(role="assistant", content=chunk_str)
-                    )
+                    accumulated = str(chunk)
+                    # Extract only the new content since last chunk
+                    delta = accumulated[len(previous_text):]
+                    previous_text = accumulated
+                    if delta:  # Only yield if there's new content
+                        yield StandardResponse(
+                            data=ChatResponse(role="assistant", content=delta)
+                        )
+                full_response = previous_text
 
             # Add full response to memory after streaming completes
             if conversation_memory and full_response:

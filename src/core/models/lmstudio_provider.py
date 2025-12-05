@@ -13,6 +13,7 @@ from typing import Optional
 
 import httpx
 from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 from src.core.utils.config import LMStudioSettings, get_settings
 from src.core.utils.exceptions import ModelError
@@ -174,11 +175,17 @@ def create_lmstudio_model(
     # Use provided model name or default from settings
     final_model_name = model_name or lm_settings.model_name
 
-    # Create and return OpenAI-compatible model configured for LM Studio
-    model = OpenAIModel(
-        final_model_name,
+    # Create OpenAI provider configured for LM Studio endpoint
+    # pydantic-ai 1.x requires using OpenAIProvider instead of passing base_url directly
+    provider = OpenAIProvider(
         base_url=lm_settings.base_url,
         api_key=lm_settings.api_key,  # Usually "not-needed" for LM Studio
+    )
+
+    # Create and return OpenAI-compatible model with the custom provider
+    model = OpenAIModel(
+        final_model_name,
+        provider=provider,
     )
 
     logger.info(
