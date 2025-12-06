@@ -91,20 +91,18 @@ services:
     networks:
       - mai-network
 
-  mai-gui:
+  mai-frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.gui
-    container_name: mai-gui
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mai-frontend
     ports:
-      - "7860:7860"
-    environment:
-      - GUI_API_BASE_URL=http://mai-api:8000/api/v1
+      - "3000:3000"
     depends_on:
       mai-api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
       interval: 30s
       timeout: 10s
       retries: 3
