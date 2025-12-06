@@ -1,6 +1,6 @@
 # MAI Framework
 
-A local-first AI agent framework built on Pydantic AI. Designed for building a private NotebookLM-style application with local LLM inference via LM Studio.
+A local-first AI agent framework built on Pydantic AI. 
 
 ## What This Is
 
