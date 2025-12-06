@@ -11,6 +11,12 @@ from src.api.schemas.agents import (
     ToolCallInfo,
     ErrorDetail
 )
+from src.api.schemas.messages import (
+    TextContent,
+    ImageContent,
+    MessageContent,
+    MultimodalMessage,
+)
 
 __all__ = [
     "AgentRunRequest",
@@ -21,5 +27,9 @@ __all__ = [
     "SessionDeleteResponse",
     "AgentErrorResponse",
     "ToolCallInfo",
-    "ErrorDetail"
+    "ErrorDetail",
+    "TextContent",
+    "ImageContent",
+    "MessageContent",
+    "MultimodalMessage",
 ]

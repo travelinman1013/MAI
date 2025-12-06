@@ -16,5 +16,13 @@ class GUISettings(BaseSettings):
     app_title: str = "MAI Chat Interface"
     server_port: int = 7860
 
+    # Document and image limits
+    max_document_size_mb: int = 10
+    max_image_size_mb: int = 5
+
+    # Feature flags
+    enable_model_switching: bool = True
+    show_debug_info: bool = False
+
 
 gui_settings = GUISettings()

@@ -25,6 +25,7 @@ class MAIClient:
         message: str,
         agent_name: str = "chat_agent",
         session_id: str | None = None,
+        images: list[str] | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream a chat response from the agent.
 
@@ -32,17 +33,20 @@ class MAIClient:
             message: The user's message
             agent_name: Name of the agent to use
             session_id: Optional session ID for conversation continuity
+            images: Optional list of image URLs or base64 data URIs
 
         Yields:
             Content chunks as they arrive
         """
         url = f"{self.base_url}/agents/stream/{agent_name}"
-        payload = {
+        payload: dict[str, Any] = {
             "user_input": message,
             "session_id": session_id,
         }
+        if images:
+            payload["images"] = images
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream("POST", url, json=payload) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
@@ -169,6 +173,73 @@ class MAIClient:
                 "model_name": None,
                 "error": str(e),
             }
+
+    async def list_models(self) -> list[dict]:
+        """List available models from LM Studio.
+
+        Returns:
+            List of model objects with id, name, loaded fields
+        """
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                response = await client.get(f"{self.base_url}/models/")
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError:
+                return []
+
+    async def load_model(self, model_id: str) -> dict:
+        """Load a model in LM Studio.
+
+        Args:
+            model_id: The model identifier to load
+
+        Returns:
+            Response dict with success, message, model_id
+        """
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{self.base_url}/models/load",
+                json={"model_id": model_id},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_current_model(self) -> str | None:
+        """Get the currently loaded model name.
+
+        Returns:
+            Model name if loaded, None otherwise
+        """
+        models = await self.list_models()
+        loaded = [m for m in models if m.get("loaded")]
+        if loaded:
+            return loaded[0].get("name")
+        return None
+
+    async def extract_document(self, file_path: str) -> dict[str, Any] | None:
+        """Extract text content from a document file.
+
+        Args:
+            file_path: Path to the document file
+
+        Returns:
+            Dict with filename, content, char_count, truncated fields or None on error
+        """
+        try:
+            from pathlib import Path
+
+            url = f"{self.base_url}/documents/extract"
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                with open(file_path, "rb") as f:
+                    filename = Path(file_path).name
+                    files = {"file": (filename, f)}
+                    response = await client.post(url, files=files)
+                    response.raise_for_status()
+                    return response.json()
+        except Exception:
+            return None
 
 
 # Singleton instance

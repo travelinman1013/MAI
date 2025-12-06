@@ -15,13 +15,15 @@ MAI (My AI) is a personal AI framework that keeps everything local:
 | Component | Status |
 |-----------|--------|
 | FastAPI backend | Working |
-| Gradio chat UI | Working |
+| Gradio chat UI | Working (enhanced) |
 | Redis caching | Working |
-| LM Studio integration | Working |
+| LM Studio integration | Working (with model switching) |
 | PostgreSQL database | Configured (run prompts to set up) |
 | Qdrant vector store | Configured (run prompts to set up) |
 | Conversation memory | Working |
-| Document ingestion | Planned |
+| Image support | Working (multimodal chat) |
+| Document upload | Working (PDF/TXT/MD) |
+| Custom theme | Working |
 | RAG pipeline | Planned |
 
 ## Quick Start
@@ -62,6 +64,75 @@ docker compose ps
 1. Make sure LM Studio is running with a model loaded
 2. Open http://localhost:7860
 3. Start chatting
+
+## Features
+
+### Enhanced Chat Interface
+
+The Gradio frontend provides a polished chat experience with:
+
+- **Custom Visual Theme** - Modern, clean interface with custom colors and styling
+- **Model Switching** - Switch between LM Studio models without restarting
+- **Multimodal Input** - Upload images for vision-enabled models
+- **Document Context** - Upload PDF, TXT, or MD files to inject context
+- **Session Management** - Save, load, and switch between conversation sessions
+- **Real-time Status** - Connection status and service health monitoring
+
+### Keyboard Shortcuts
+
+- **Enter** - Send message
+- **Shift+Enter** - New line in message
+
+### Document Upload
+
+Upload documents to provide context to the AI:
+
+1. Click the "Document" tab in the attachment area
+2. Upload a PDF, TXT, or MD file (up to 10MB)
+3. The content is extracted and injected into your next message
+4. Supports automatic truncation for large documents (50,000 character limit)
+
+Supported formats:
+- **PDF** - Text extraction from PDF documents
+- **TXT** - Plain text files
+- **MD/Markdown** - Markdown documents
+
+### Image Support
+
+For vision-enabled models:
+
+1. Click the "Image" tab in the attachment area
+2. Upload or paste an image (up to 5MB)
+3. Ask questions about the image
+4. Supports: JPG, PNG, GIF, WebP
+
+### Model Management
+
+Switch between different LM Studio models:
+
+1. Select a model from the "Model" dropdown
+2. The model will be loaded in LM Studio automatically
+3. Continue chatting with the new model
+
+### Configuration
+
+GUI settings can be configured via environment variables:
+
+```bash
+# GUI Configuration
+GUI_API_BASE_URL=http://localhost:8000/api/v1
+GUI_DEFAULT_AGENT=chat_agent
+GUI_APP_TITLE="MAI Chat Interface"
+GUI_SERVER_PORT=7860
+
+# Feature limits
+GUI_MAX_DOCUMENT_SIZE_MB=10
+GUI_MAX_IMAGE_SIZE_MB=5
+
+# Feature flags
+GUI_ENABLE_MODEL_SWITCHING=true
+GUI_SHOW_DEBUG_INFO=false
+```
 
 ## Architecture
 
@@ -165,8 +236,17 @@ poetry run python -m src.gui.app
 ### Running Tests
 
 ```bash
+# Run all tests
 poetry run pytest
+
+# Run with coverage
 poetry run pytest --cov=src
+
+# Run frontend integration tests
+poetry run pytest tests/gui/test_frontend_integration.py -v
+
+# Run the full frontend test suite
+./scripts/test_frontend.sh
 ```
 
 ### Code Quality

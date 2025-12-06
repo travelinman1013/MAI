@@ -241,10 +241,11 @@ async def run_agent(
             agent_name=agent_name
         )
 
-        # Execute agent
+        # Execute agent with optional images
         result = await agent_instance.run_async(
             user_input=request.user_input,
-            deps=deps
+            deps=deps,
+            images=request.images,
         )
 
         # Calculate execution time
@@ -354,10 +355,11 @@ async def stream_agent(
                 full_response = ""
                 chunk_count = 0
 
-                # Stream from agent
+                # Stream from agent with optional images
                 async for chunk in agent_instance.run_stream(
                     user_input=request.user_input,
-                    deps=deps
+                    deps=deps,
+                    images=request.images,
                 ):
                     chunk_count += 1
 

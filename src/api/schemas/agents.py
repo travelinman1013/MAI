@@ -33,6 +33,10 @@ class AgentRunRequest(BaseModel):
         None,
         description="Optional configuration overrides for this specific run (e.g., temperature, max_tokens)."
     )
+    images: Optional[List[str]] = Field(
+        None,
+        description="Optional list of images as base64 data URIs or URLs."
+    )
 
     class Config:
         json_schema_extra = {
@@ -43,7 +47,8 @@ class AgentRunRequest(BaseModel):
                 "config": {
                     "temperature": 0.7,
                     "max_tokens": 500
-                }
+                },
+                "images": None
             }
         }
 
@@ -68,6 +73,10 @@ class AgentStreamRequest(BaseModel):
     config: Optional[Dict[str, Any]] = Field(
         None,
         description="Optional configuration overrides."
+    )
+    images: Optional[List[str]] = Field(
+        None,
+        description="Optional list of images as base64 data URIs or URLs."
     )
 
 
