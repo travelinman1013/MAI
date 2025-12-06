@@ -48,14 +48,26 @@ async def _init_postgresql() -> bool:
 
 
 async def _init_qdrant() -> bool:
-    """Initialize Qdrant connection. Returns True if successful."""
+    """Initialize Qdrant connection and create default collection. Returns True if successful."""
     try:
-        from qdrant_client import QdrantClient
+        from src.infrastructure.vector_store.qdrant_client import get_qdrant_client
         from src.core.utils.config import get_settings
 
         settings = get_settings()
-        client = QdrantClient(url=settings.qdrant.url)
-        client.get_collections()
+        qdrant = await get_qdrant_client()
+
+        # Create default collection if it doesn't exist
+        collection_name = settings.qdrant.collection_name
+        if not await qdrant.collection_exists(collection_name):
+            await qdrant.create_collection(
+                collection_name=collection_name,
+                vector_size=settings.qdrant.vector_size,
+                distance_metric=settings.qdrant.distance_metric,
+            )
+            print(f"Startup: Created Qdrant collection: {collection_name}")
+        else:
+            print(f"Startup: Qdrant collection exists: {collection_name}")
+
         print("Startup: Qdrant connected successfully")
         return True
     except Exception as e:
@@ -103,6 +115,12 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
+    try:
+        from src.infrastructure.vector_store.qdrant_client import close_qdrant_client
+        await close_qdrant_client()
+    except Exception:
+        pass
+
     print("Shutdown: Application shutting down.")
 
 app = FastAPI(
@@ -122,7 +140,16 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint with service status."""
+    # Determine overall health - redis is required, postgresql and qdrant are optional
+    required_services = ["redis"]
+    required_healthy = all(_service_status.get(svc, False) for svc in required_services)
+
     return {
-        "status": "healthy",
-        "services": _service_status,
+        "status": "healthy" if required_healthy else "degraded",
+        "services": {
+            "redis": _service_status.get("redis", False),
+            "postgresql": _service_status.get("postgresql", False),
+            "qdrant": _service_status.get("qdrant", False),
+        },
+        "version": "0.1.0",
     }

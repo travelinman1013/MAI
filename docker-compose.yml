@@ -16,6 +16,47 @@ services:
     networks:
       - mai-network
 
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: mai-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mai_framework
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mai_framework"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - mai-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: mai-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-mai-qdrant-secret-key}
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/6333 && exec 3>&-'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - mai-network
+
   mai-api:
     build:
       context: .
@@ -30,8 +71,15 @@ services:
       - LLM__PROVIDER=lmstudio
       - LM_STUDIO__BASE_URL=http://host.docker.internal:1234/v1
       - LM_STUDIO__MODEL_NAME=google/gemma-3-12b
+      - DATABASE__URL=postgresql+asyncpg://postgres:postgres@postgres:5432/mai_framework
+      - QDRANT__URL=http://qdrant:6333
+      - QDRANT__API_KEY=${QDRANT_API_KEY:-mai-qdrant-secret-key}
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
@@ -71,4 +119,8 @@ networks:
 
 volumes:
   redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  qdrant_data:
     driver: local

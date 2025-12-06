@@ -293,10 +293,13 @@ class QdrantVectorStore:
         try:
             info = await self.client.get_collection(collection)
 
+            # Handle different qdrant_client versions (vectors_count was removed in newer versions)
+            vectors_count = getattr(info, "vectors_count", info.points_count)
+
             return {
                 "name": collection,
                 "points_count": info.points_count,
-                "vectors_count": info.vectors_count,
+                "vectors_count": vectors_count,
                 "segments_count": info.segments_count,
                 "status": info.status,
                 "config": {
