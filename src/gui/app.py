@@ -74,13 +74,14 @@ footer {
     font-weight: 500 !important;
 }
 
-/* Status bar styling */
+/* Status bar styling - works with dark theme */
 .status-bar {
-    background: linear-gradient(to right, #f8fafc, #f1f5f9);
-    padding: 0.75rem 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-    font-size: 0.875rem;
+    background: transparent;
+    padding: 0.5rem 0;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+    opacity: 0.7;
+    text-align: center;
 }
 
 /* Session info styling */
@@ -109,6 +110,13 @@ footer {
 }
 .image-upload-container:hover {
     border-color: #4f46e5;
+}
+.image-upload-container .upload-container {
+    min-height: 100px;
+}
+.image-upload-container .upload-text {
+    font-size: 0.75rem;
+    line-height: 1.2;
 }
 
 /* Document upload styling */
@@ -145,35 +153,20 @@ async def get_agents_list() -> dict:
         return gr.Dropdown(choices=[gui_settings.default_agent], value=gui_settings.default_agent)
 
 
-async def get_models_list() -> dict:
-    """Fetch available models for dropdown."""
+async def get_current_model() -> str:
+    """Fetch the currently loaded model from LM Studio."""
     try:
         models = await mai_client.list_models()
         if not models:
-            return gr.Dropdown(choices=["No models available"], value="No models available")
+            return "No model loaded"
 
-        model_ids = [m.get("id", "unknown") for m in models]
-        # Select the first loaded model as default
-        loaded = [m.get("id") for m in models if m.get("loaded")]
-        default = loaded[0] if loaded else model_ids[0]
-
-        return gr.Dropdown(choices=model_ids, value=default)
+        # LM Studio /v1/models returns only loaded models
+        loaded = [m.get("id", "unknown") for m in models]
+        if loaded:
+            return loaded[0]
+        return "No model loaded"
     except Exception:
-        return gr.Dropdown(choices=["Error loading models"], value="Error loading models")
-
-
-async def switch_model(model_id: str) -> str:
-    """Switch to a different model."""
-    if not model_id or model_id.startswith("No models") or model_id.startswith("Error"):
-        return "No model selected"
-
-    try:
-        result = await mai_client.load_model(model_id)
-        if result.get("success"):
-            return f"Switched to {model_id}"
-        return f"Failed: {result.get('message', 'Unknown error')}"
-    except Exception as e:
-        return f"Error: {e}"
+        return "Error fetching model"
 
 
 async def check_connection() -> str:
@@ -208,13 +201,16 @@ async def check_connection() -> str:
     return " | ".join(parts)
 
 
-async def check_llm_warning() -> str:
-    """Check if LLM is unavailable and return warning message."""
+async def check_llm_warning() -> dict:
+    """Check if LLM is unavailable and return warning message with visibility."""
     llm_status = await mai_client.get_llm_status()
     if not llm_status.get("connected"):
         error = llm_status.get("error", "LLM unavailable")
-        return f"**Warning:** LLM unavailable - responses are in echo mode. ({error})"
-    return ""
+        return gr.update(
+            value=f"**Warning:** LLM unavailable - responses are in echo mode. ({error})",
+            visible=True
+        )
+    return gr.update(value="", visible=False)
 
 
 def encode_image(image_path: str) -> str | None:
@@ -353,12 +349,12 @@ async def safe_stream_response(
         # Extract the history from the last yielded result or args
         history = kwargs.get("history", []) if kwargs else (args[4] if len(args) > 4 else [])
         if history and len(history) > 0:
-            history[-1][1] = "Connection error: Cannot reach the MAI API server. Please check that the server is running."
+            history[-1]["content"] = "Connection error: Cannot reach the MAI API server. Please check that the server is running."
         yield "", None, None, "", history
     except TimeoutError as e:
         history = kwargs.get("history", []) if kwargs else (args[4] if len(args) > 4 else [])
         if history and len(history) > 0:
-            history[-1][1] = "Request timeout: The server took too long to respond. Please try again."
+            history[-1]["content"] = "Request timeout: The server took too long to respond. Please try again."
         yield "", None, None, "", history
     except Exception as e:
         history = kwargs.get("history", []) if kwargs else (args[4] if len(args) > 4 else [])
@@ -376,7 +372,7 @@ async def safe_stream_response(
             user_friendly_msg = "Server error. Please check the server logs."
 
         if history and len(history) > 0:
-            history[-1][1] = user_friendly_msg
+            history[-1]["content"] = user_friendly_msg
         yield "", None, None, "", history
 
 
@@ -436,11 +432,11 @@ async def stream_response_with_attachments(
             # Add image indicator to display message
             display_message += f"\n[Image attached]"
 
-    # Add user message to history (simple tuple format for older Gradio)
-    history.append([display_message, None])
+    # Add user message to history (dict format for Gradio 6.0+)
+    history.append({"role": "user", "content": display_message})
 
-    # Add loading indicator
-    history[-1][1] = "..."
+    # Add assistant message with loading indicator
+    history.append({"role": "assistant", "content": "..."})
 
     try:
         # Prepare images for API
@@ -455,14 +451,14 @@ async def stream_response_with_attachments(
             images=images,
         ):
             assistant_response += chunk
-            history[-1][1] = assistant_response
+            history[-1]["content"] = assistant_response
             yield "", None, None, "", history
 
     except ConnectionError:
-        history[-1][1] = "Connection error: Cannot reach the MAI API server. Please check that the server is running."
+        history[-1]["content"] = "Connection error: Cannot reach the MAI API server. Please check that the server is running."
         yield "", None, None, "", history
     except TimeoutError:
-        history[-1][1] = "Request timeout: The server took too long to respond. Please try again."
+        history[-1]["content"] = "Request timeout: The server took too long to respond. Please try again."
         yield "", None, None, "", history
     except Exception as e:
         error_msg = str(e)
@@ -478,39 +474,39 @@ async def stream_response_with_attachments(
         elif "500" in error_msg or "503" in error_msg:
             user_friendly_msg = "Server error. Please check the server logs."
 
-        history[-1][1] = user_friendly_msg
+        history[-1]["content"] = user_friendly_msg
         yield "", None, None, "", history
 
 
-async def load_session_history(session_id: str) -> tuple[list, str]:
+async def load_session_history(session_id: str) -> tuple[list, dict]:
     """Load conversation history for a session.
 
     Args:
         session_id: The session ID to load history for
 
     Returns:
-        Tuple of (history list, feedback message)
+        Tuple of (history list, feedback update)
     """
     if not session_id:
-        return [], "No session ID provided"
+        return [], gr.update(value="No session ID provided", visible=True)
     try:
         api_messages = await mai_client.get_history(session_id)
         history = format_history_for_gradio(api_messages)
         if history:
-            return history, f"Loaded {len(history)} messages"
-        return [], "No history found for this session"
+            return history, gr.update(value=f"Loaded {len(history)} messages", visible=True)
+        return [], gr.update(value="No history found for this session", visible=True)
     except Exception as e:
-        return [], f"Error loading history: {e}"
+        return [], gr.update(value=f"Error loading history: {e}", visible=True)
 
 
-async def clear_session(session_id: str) -> tuple[str, list, str, str]:
+async def clear_session(session_id: str) -> tuple[str, list, str, dict]:
     """Clear the current session and start fresh.
 
     Args:
         session_id: The session ID to clear
 
     Returns:
-        Tuple of (new session ID, empty history, session info text, feedback)
+        Tuple of (new session ID, empty history, session info text, feedback update)
     """
     if session_id:
         try:
@@ -518,17 +514,7 @@ async def clear_session(session_id: str) -> tuple[str, list, str, str]:
         except Exception:
             pass
     new_session_id = generate_session_id()
-    return new_session_id, [], f"Session: `{new_session_id}`", "Session cleared"
-
-
-async def new_session() -> tuple[str, list, str, str]:
-    """Start a new session without clearing old one.
-
-    Returns:
-        Tuple of (new session ID, empty history, session info text, feedback)
-    """
-    new_session_id = generate_session_id()
-    return new_session_id, [], f"Session: `{new_session_id}`", "New session started"
+    return new_session_id, [], f"Session: `{new_session_id}`", gr.update(value="", visible=False)
 
 
 def create_chat_interface() -> gr.Blocks:
@@ -547,8 +533,8 @@ def create_chat_interface() -> gr.Blocks:
             elem_classes=["status-bar"],
         )
 
-        # LLM warning banner
-        llm_warning = gr.Markdown("", visible=True, elem_classes=["warning-banner"])
+        # LLM warning banner (hidden when empty)
+        llm_warning = gr.Markdown("", visible=False, elem_classes=["warning-banner"])
 
         # Controls row with better grouping
         with gr.Row():
@@ -561,13 +547,15 @@ def create_chat_interface() -> gr.Blocks:
                     container=True,
                 )
             with gr.Column(scale=2):
-                model_selector = gr.Dropdown(
-                    label="Model",
-                    choices=["Loading..."],
-                    value="Loading...",
-                    interactive=True,
-                    container=True,
-                )
+                with gr.Row():
+                    model_display = gr.Textbox(
+                        label="Model",
+                        value="Loading...",
+                        interactive=False,
+                        container=True,
+                        scale=4,
+                    )
+                    refresh_model_btn = gr.Button("↻", size="sm", scale=1)
             with gr.Column(scale=3):
                 session_id = gr.Textbox(
                     label="Session ID",
@@ -576,12 +564,10 @@ def create_chat_interface() -> gr.Blocks:
                     container=True,
                 )
             with gr.Column(scale=1):
-                with gr.Row():
-                    load_btn = gr.Button("Load", size="sm")
-                    new_btn = gr.Button("New", size="sm", variant="secondary")
+                load_btn = gr.Button("Load Session", size="sm")
 
-        # Feedback area (for session and model operations)
-        feedback = gr.Markdown("")
+        # Feedback area (hidden when empty)
+        feedback = gr.Markdown("", visible=False)
 
         # Chat interface with avatars and multimodal support
         chatbot = gr.Chatbot(
@@ -602,7 +588,7 @@ def create_chat_interface() -> gr.Blocks:
                         image_input = gr.Image(
                             label="Attach Image",
                             type="filepath",
-                            height=120,
+                            height=150,
                             sources=["upload", "clipboard"],
                             show_label=False,
                             elem_classes=["image-upload-container"],
@@ -647,15 +633,14 @@ def create_chat_interface() -> gr.Blocks:
 
         # Load agents, models and check connection on page load
         demo.load(get_agents_list, outputs=[agent_selector])
-        demo.load(get_models_list, outputs=[model_selector])
+        demo.load(get_current_model, outputs=[model_display])
         demo.load(check_connection, outputs=[status_bar])
         demo.load(check_llm_warning, outputs=[llm_warning])
 
-        # Model switching
-        model_selector.change(
-            switch_model,
-            inputs=[model_selector],
-            outputs=[feedback],
+        # Model refresh button
+        refresh_model_btn.click(
+            get_current_model,
+            outputs=[model_display],
         )
 
         # Session management
@@ -663,10 +648,6 @@ def create_chat_interface() -> gr.Blocks:
             load_session_history,
             inputs=[session_id],
             outputs=[chatbot, feedback],
-        )
-        new_btn.click(
-            new_session,
-            outputs=[session_id, chatbot, session_info, feedback],
         )
         clear_btn.click(
             clear_session,
