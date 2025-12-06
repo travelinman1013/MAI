@@ -111,6 +111,30 @@ services:
     networks:
       - mai-network
 
+  mai-gui:
+    profiles:
+      - gradio
+    build:
+      context: .
+      dockerfile: Dockerfile.gui
+    container_name: mai-gui
+    ports:
+      - "7860:7860"
+    environment:
+      - GUI_API_BASE_URL=http://mai-api:8000/api/v1
+    depends_on:
+      mai-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - mai-network
+
 networks:
   mai-network:
     driver: bridge
