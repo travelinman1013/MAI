@@ -13,7 +13,7 @@ class TestProviderType:
 
     def test_all_providers_defined(self):
         """All expected providers should be defined."""
-        expected = {"openai", "lmstudio", "ollama", "llamacpp", "auto"}
+        expected = {"openai", "lmstudio", "ollama", "llamacpp", "mlxlm", "auto"}
         actual = {p.value for p in ProviderType}
         assert actual == expected
 
@@ -29,6 +29,7 @@ class TestProviderType:
         assert ProviderType.OLLAMA == "ollama"
         assert ProviderType.LMSTUDIO == "lmstudio"
         assert ProviderType.LLAMACPP == "llamacpp"
+        assert ProviderType.MLXLM == "mlxlm"
         assert ProviderType.AUTO == "auto"
 
     def test_provider_from_string(self):

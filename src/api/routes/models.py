@@ -101,6 +101,17 @@ async def list_models() -> ModelsListResponse:
                     provider="llamacpp",
                 ))
 
+        elif provider == "mlxlm":
+            from src.infrastructure.llm.mlxlm_client import MlxLmClient
+            client = MlxLmClient()
+            raw_models = await client.list_models()
+            for m in raw_models:
+                models.append(ModelInfo(
+                    id=m.get("id", ""),
+                    name=m.get("id", ""),
+                    provider="mlxlm",
+                ))
+
         elif provider == "lmstudio":
             from src.core.models.lmstudio_provider import detect_lmstudio_model
             model_id = await detect_lmstudio_model(settings.lm_studio.base_url)
@@ -206,6 +217,17 @@ async def get_loaded_models() -> List[ModelInfo]:
                     id=m.get("id", ""),
                     name=m.get("id", ""),
                     provider="llamacpp",
+                ))
+
+        elif provider == "mlxlm":
+            from src.infrastructure.llm.mlxlm_client import MlxLmClient
+            client = MlxLmClient()
+            raw_models = await client.list_models()
+            for m in raw_models:
+                models.append(ModelInfo(
+                    id=m.get("id", ""),
+                    name=m.get("id", ""),
+                    provider="mlxlm",
                 ))
 
         elif provider == "openai":
@@ -334,6 +356,7 @@ async def check_provider_health():
     from src.core.models.lmstudio_provider import lmstudio_health_check
     from src.core.models.ollama_provider import ollama_health_check
     from src.core.models.llamacpp_provider import llamacpp_health_check
+    from src.core.models.mlxlm_provider import mlxlm_health_check
 
     settings = get_settings()
     provider = settings.llm.provider
@@ -342,6 +365,7 @@ async def check_provider_health():
         "lmstudio": lmstudio_health_check,
         "ollama": ollama_health_check,
         "llamacpp": llamacpp_health_check,
+        "mlxlm": mlxlm_health_check,
     }
 
     if provider == "openai":

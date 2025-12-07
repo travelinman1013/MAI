@@ -23,14 +23,14 @@ class LLMProviderSettings(BaseSettings):
 
     provider: str = Field(
         default="auto",
-        description="LLM provider to use: 'openai', 'lmstudio', 'ollama', 'llamacpp', or 'auto' (auto-detect)",
+        description="LLM provider to use: 'openai', 'lmstudio', 'ollama', 'llamacpp', 'mlxlm', or 'auto' (auto-detect)",
     )
 
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v: str) -> str:
         """Validate provider selection."""
-        allowed = {"openai", "lmstudio", "ollama", "llamacpp", "auto"}
+        allowed = {"openai", "lmstudio", "ollama", "llamacpp", "mlxlm", "auto"}
         v_lower = v.lower()
         if v_lower not in allowed:
             raise ValueError(f"LLM provider must be one of {allowed}")
@@ -168,6 +168,49 @@ class LlamaCppSettings(BaseSettings):
     n_threads: int = Field(
         default=4,
         description="Number of CPU threads to use",
+    )
+
+
+class MlxLmSettings(BaseSettings):
+    """MLX-LM server configuration.
+
+    Environment variables use MLXLM__ prefix.
+    Example: MLXLM__BASE_URL=http://localhost:8080/v1
+
+    MLX-LM runs on macOS host with Metal GPU acceleration.
+    Server command: mlx_lm.server --model <model> --port 8080
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="MLXLM__", env_nested_delimiter="__", extra="ignore"
+    )
+
+    base_url: str = Field(
+        default="http://localhost:8080/v1",
+        description="Base URL for MLX-LM server (OpenAI-compatible endpoint)",
+    )
+    api_key: str = Field(
+        default="not-needed",
+        description="API key (not required for MLX-LM)",
+    )
+    model_name: str = Field(
+        default="local-model",
+        description="Model identifier (used for logging/display)",
+    )
+    max_tokens: int = Field(
+        default=2048,
+        description="Maximum tokens in response",
+    )
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature",
+    )
+    timeout: int = Field(
+        default=120,
+        ge=1,
+        description="Request timeout in seconds",
     )
 
 
@@ -355,6 +398,7 @@ class Settings(BaseSettings):
     lm_studio: LMStudioSettings = Field(default_factory=LMStudioSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     llamacpp: LlamaCppSettings = Field(default_factory=LlamaCppSettings)
+    mlxlm: MlxLmSettings = Field(default_factory=MlxLmSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     qdrant: QdrantSettings = Field(default_factory=QdrantSettings)

@@ -1,8 +1,8 @@
 """LLM Provider Factory.
 
 This module provides a unified factory for creating LLM model instances,
-supporting multiple providers (OpenAI, LM Studio, Ollama, llama.cpp) with
-automatic selection and intelligent auto-detection.
+supporting multiple providers (OpenAI, LM Studio, Ollama, llama.cpp, MLX-LM)
+with automatic selection and intelligent auto-detection.
 """
 
 from typing import Literal, Optional
@@ -25,13 +25,18 @@ from src.core.models.llamacpp_provider import (
     create_llamacpp_model_async,
     llamacpp_health_check,
 )
+from src.core.models.mlxlm_provider import (
+    create_mlxlm_model,
+    create_mlxlm_model_async,
+    mlxlm_health_check,
+)
 from src.core.utils.config import get_settings
 from src.core.utils.exceptions import ConfigurationError
 from src.core.utils.logging import get_logger_with_context
 
 logger = get_logger_with_context()
 
-ProviderType = Literal["openai", "lmstudio", "ollama", "llamacpp", "auto"]
+ProviderType = Literal["openai", "lmstudio", "ollama", "llamacpp", "mlxlm", "auto"]
 
 
 def _auto_detect_provider() -> str:
@@ -86,6 +91,7 @@ async def _auto_detect_provider_async() -> str:
         ("lmstudio", lmstudio_health_check),
         ("ollama", ollama_health_check),
         ("llamacpp", llamacpp_health_check),
+        ("mlxlm", mlxlm_health_check),
     ]
 
     for provider_name, health_check_fn in local_providers:
@@ -156,7 +162,7 @@ def get_model_provider(
 
     Args:
         provider: Override the configured provider. Options:
-                  'openai', 'lmstudio', 'ollama', 'llamacpp', 'auto'
+                  'openai', 'lmstudio', 'ollama', 'llamacpp', 'mlxlm', 'auto'
 
     Returns:
         Configured OpenAIModel instance (works for all OpenAI-compatible providers)
@@ -182,6 +188,9 @@ def get_model_provider(
 
         # Force llama.cpp
         model = get_model_provider(provider="llamacpp")
+
+        # Force MLX-LM (Apple Silicon)
+        model = get_model_provider(provider="mlxlm")
         ```
     """
     settings = get_settings()
@@ -202,10 +211,12 @@ def get_model_provider(
         return create_ollama_model()
     elif selected_provider == "llamacpp":
         return create_llamacpp_model()
+    elif selected_provider == "mlxlm":
+        return create_mlxlm_model()
     else:
         raise ConfigurationError(
             f"Invalid LLM provider: {selected_provider}. "
-            "Must be 'openai', 'lmstudio', 'ollama', 'llamacpp', or 'auto'."
+            "Must be 'openai', 'lmstudio', 'ollama', 'llamacpp', 'mlxlm', or 'auto'."
         )
 
 
@@ -216,13 +227,13 @@ async def get_model_provider_async(
 ) -> OpenAIModel:
     """Async version of get_model_provider with full auto-detection.
 
-    For local providers (LM Studio, Ollama, llama.cpp), this can auto-detect
+    For local providers (LM Studio, Ollama, llama.cpp, MLX-LM), this can auto-detect
     the loaded model and test the connection. For OpenAI, this behaves the
     same as the sync version.
 
     Args:
         provider: Override the configured provider. Options:
-                  'openai', 'lmstudio', 'ollama', 'llamacpp', 'auto'
+                  'openai', 'lmstudio', 'ollama', 'llamacpp', 'mlxlm', 'auto'
         test_connection: If True, verify connection before returning.
         auto_detect_model: If True, auto-detect model from provider.
 
@@ -274,10 +285,15 @@ async def get_model_provider_async(
             auto_detect=auto_detect_model,
             test_connection=test_connection,
         )
+    elif selected_provider == "mlxlm":
+        return await create_mlxlm_model_async(
+            auto_detect=auto_detect_model,
+            test_connection=test_connection,
+        )
     else:
         raise ConfigurationError(
             f"Invalid LLM provider: {selected_provider}. "
-            "Must be 'openai', 'lmstudio', 'ollama', 'llamacpp', or 'auto'."
+            "Must be 'openai', 'lmstudio', 'ollama', 'llamacpp', 'mlxlm', or 'auto'."
         )
 
 
@@ -320,6 +336,7 @@ async def check_all_providers() -> dict[str, ProviderHealthStatus]:
         ("lmstudio", lmstudio_health_check),
         ("ollama", ollama_health_check),
         ("llamacpp", llamacpp_health_check),
+        ("mlxlm", mlxlm_health_check),
     ]:
         try:
             health = await health_fn()

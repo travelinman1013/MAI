@@ -24,6 +24,7 @@ class ProviderType(str, Enum):
     - LMSTUDIO: LM Studio local server (OpenAI-compatible)
     - OLLAMA: Ollama local model server
     - LLAMACPP: llama.cpp direct inference
+    - MLXLM: MLX-LM server for Apple Silicon (Metal GPU)
     - AUTO: Automatic provider selection based on availability
     """
 
@@ -31,6 +32,7 @@ class ProviderType(str, Enum):
     LMSTUDIO = "lmstudio"
     OLLAMA = "ollama"
     LLAMACPP = "llamacpp"
+    MLXLM = "mlxlm"
     AUTO = "auto"
 
 
