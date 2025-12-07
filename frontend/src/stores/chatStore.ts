@@ -49,7 +49,7 @@ export const useChatStore = create<ChatStore>()(
       activeSessionId: null,
       messages: {},
       isStreaming: false,
-      activeAgent: 'chat',
+      activeAgent: 'chat_agent',
       activeModel: null,
 
       // Actions

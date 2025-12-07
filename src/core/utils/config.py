@@ -175,10 +175,10 @@ class MlxLmSettings(BaseSettings):
     """MLX-LM server configuration.
 
     Environment variables use MLXLM__ prefix.
-    Example: MLXLM__BASE_URL=http://localhost:8080/v1
+    Example: MLXLM__BASE_URL=http://localhost:8081/v1
 
     MLX-LM runs on macOS host with Metal GPU acceleration.
-    Server command: mlx_lm.server --model <model> --port 8080
+    Server command: mlx_lm.server --model <model> --port 8081
     """
 
     model_config = SettingsConfigDict(
@@ -186,7 +186,7 @@ class MlxLmSettings(BaseSettings):
     )
 
     base_url: str = Field(
-        default="http://localhost:8080/v1",
+        default="http://localhost:8081/v1",
         description="Base URL for MLX-LM server (OpenAI-compatible endpoint)",
     )
     api_key: str = Field(

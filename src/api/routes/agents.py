@@ -86,10 +86,11 @@ async def get_llm_status() -> LLMStatusResponse:
     from src.core.models.lmstudio_provider import lmstudio_health_check
     from src.core.models.ollama_provider import ollama_health_check
     from src.core.models.llamacpp_provider import llamacpp_health_check
+    from src.core.models.mlxlm_provider import mlxlm_health_check
 
     settings = get_settings()
     provider = settings.llm.provider
-    available_providers = ["openai", "lmstudio", "ollama", "llamacpp"]
+    available_providers = ["openai", "lmstudio", "ollama", "llamacpp", "mlxlm"]
 
     try:
         # Auto-detect active provider if set to auto
@@ -99,6 +100,7 @@ async def get_llm_status() -> LLMStatusResponse:
                 ("lmstudio", lmstudio_health_check),
                 ("ollama", ollama_health_check),
                 ("llamacpp", llamacpp_health_check),
+                ("mlxlm", mlxlm_health_check),
             ]:
                 try:
                     health = await health_fn()
@@ -177,6 +179,17 @@ async def get_llm_status() -> LLMStatusResponse:
 
         elif provider == "llamacpp":
             health = await llamacpp_health_check()
+            return LLMStatusResponse(
+                provider=provider,
+                connected=health.connected,
+                model_name=health.model_id,
+                error=health.error,
+                available_providers=available_providers,
+                metadata=health.metadata if health.metadata else None,
+            )
+
+        elif provider == "mlxlm":
+            health = await mlxlm_health_check()
             return LLMStatusResponse(
                 provider=provider,
                 connected=health.connected,

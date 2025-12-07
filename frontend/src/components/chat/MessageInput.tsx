@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { FileUploadZone, UploadedFile } from './FileUploadZone'
 import { FilePreview } from './FilePreview'
 import { useChatStore } from '@/stores'
+import { streamAgent } from '@/services/api'
 import { cn } from '@/lib/utils'
 
 interface MessageInputProps {
@@ -18,6 +19,7 @@ export function MessageInput({ sessionId }: MessageInputProps) {
 
   const isStreaming = useChatStore(state => state.isStreaming)
   const addMessage = useChatStore(state => state.addMessage)
+  const updateMessage = useChatStore(state => state.updateMessage)
   const setStreaming = useChatStore(state => state.setStreaming)
 
   useEffect(() => {
@@ -42,7 +44,6 @@ export function MessageInput({ sessionId }: MessageInputProps) {
     if ((!content.trim() && files.length === 0) || isStreaming) return
 
     const images = files.filter(f => f.type === 'image').map(f => f.preview!)
-    const documents = files.filter(f => f.type === 'document').map(f => f.file.name)
 
     const userMessage = {
       id: `msg-${Date.now()}`,
@@ -56,17 +57,50 @@ export function MessageInput({ sessionId }: MessageInputProps) {
     setContent('')
     setFiles([])
 
-    // Simulate response (API integration in later step)
+    // Create placeholder for assistant response
+    const assistantMessageId = `msg-${Date.now()}-assistant`
+    addMessage(sessionId, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      isStreaming: true,
+    })
+
     setStreaming(true)
-    setTimeout(() => {
-      addMessage(sessionId, {
-        id: `msg-${Date.now()}`,
-        role: 'assistant',
-        content: `I received your message: "${userMessage.content}"${images.length > 0 ? ` with ${images.length} image(s)` : ''}${documents.length > 0 ? ` and ${documents.length} document(s)` : ''}. This is a simulated response - API integration coming soon!`,
-        timestamp: new Date(),
-      })
+
+    try {
+      // Get active agent from chat store
+      const agentName = useChatStore.getState().activeAgent || 'chat_agent'
+
+      // Stream response from backend
+      let fullContent = ''
+      for await (const chunk of streamAgent(agentName, {
+        user_input: userMessage.content,
+        session_id: sessionId,
+        images: images.length > 0 ? images : undefined,
+      })) {
+        if (chunk.content) {
+          fullContent += chunk.content
+          updateMessage(sessionId, assistantMessageId, fullContent)
+        }
+        if (chunk.done) break
+      }
+
+      // Finalize message (remove streaming flag)
+      updateMessage(sessionId, assistantMessageId, fullContent)
+
+    } catch (error) {
+      console.error('Chat error:', error)
+      // Update message with error
+      updateMessage(
+        sessionId,
+        assistantMessageId,
+        `Error: ${error instanceof Error ? error.message : 'Failed to get response'}`
+      )
+    } finally {
       setStreaming(false)
-    }, 1500)
+    }
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

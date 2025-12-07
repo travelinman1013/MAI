@@ -35,6 +35,7 @@ griffe = "^1.15.0"
 typer = "^0.20.0"
 tiktoken = "^0.7.0"
 pypdf = "^4.0"
+mlx-lm = "^0.28.4"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"
