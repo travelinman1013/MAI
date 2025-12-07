@@ -1,8 +1,8 @@
 // Re-export from stores for backwards compatibility
 export type { Message, ChatSession } from '@/stores/chatStore'
 
-// LLM provider type
-export type LLMProvider = 'openai' | 'lmstudio' | 'ollama' | 'llamacpp' | 'mlx' | 'auto'
+// LLM provider type ('mlxlm' is backend name, 'mlx' is frontend name - both supported)
+export type LLMProvider = 'openai' | 'lmstudio' | 'ollama' | 'llamacpp' | 'mlx' | 'mlxlm' | 'auto'
 
 export interface Model {
   id: string

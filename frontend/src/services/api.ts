@@ -188,11 +188,15 @@ export async function streamChat(
 
 /**
  * Get LLM provider status
+ * @param provider - Optional provider to check (e.g., 'mlx', 'lmstudio', 'ollama')
  * @returns LLM status with connection state and available providers
  */
-export async function getLLMStatus(): Promise<LLMStatusResponse> {
+export async function getLLMStatus(provider?: string): Promise<LLMStatusResponse> {
   const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/agents/llm-status`)
+  const url = provider
+    ? `${baseUrl}/agents/llm-status?provider=${encodeURIComponent(provider)}`
+    : `${baseUrl}/agents/llm-status`
+  const response = await fetch(url)
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)

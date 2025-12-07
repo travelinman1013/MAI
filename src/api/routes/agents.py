@@ -80,8 +80,13 @@ async def list_agents():
     summary="Get LLM connection status",
     description="Check if the LLM provider is connected and what model is loaded."
 )
-async def get_llm_status() -> LLMStatusResponse:
-    """Check LLM provider connection status."""
+async def get_llm_status(provider: Optional[str] = None) -> LLMStatusResponse:
+    """Check LLM provider connection status.
+
+    Args:
+        provider: Optional provider to check. If not specified, uses config default.
+                  Valid values: openai, lmstudio, ollama, llamacpp, mlxlm, mlx, auto
+    """
     from src.core.utils.config import get_settings
     from src.core.models.lmstudio_provider import lmstudio_health_check
     from src.core.models.ollama_provider import ollama_health_check
@@ -89,7 +94,14 @@ async def get_llm_status() -> LLMStatusResponse:
     from src.core.models.mlxlm_provider import mlxlm_health_check
 
     settings = get_settings()
-    provider = settings.llm.provider
+    # Use query param if provided, otherwise fall back to config
+    # Normalize 'mlx' to 'mlxlm' for backend compatibility
+    if provider:
+        provider = provider.lower()
+        if provider == 'mlx':
+            provider = 'mlxlm'
+    else:
+        provider = settings.llm.provider
     available_providers = ["openai", "lmstudio", "ollama", "llamacpp", "mlxlm"]
 
     try:

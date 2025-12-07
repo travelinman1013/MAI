@@ -8,23 +8,25 @@ import {
 } from '@/components/ui/tooltip'
 import { useLLMStatus } from '@/hooks'
 import { cn } from '@/lib/utils'
-import type { LLMProvider } from '@/types/chat'
 
-const providerLabels: Record<LLMProvider, string> = {
+// Map provider IDs to display labels (handles both frontend 'mlx' and backend 'mlxlm')
+const providerLabels: Record<string, string> = {
   openai: 'OpenAI',
   lmstudio: 'LM Studio',
   ollama: 'Ollama',
   llamacpp: 'llama.cpp',
   mlx: 'MLX-LM',
+  mlxlm: 'MLX-LM',  // Backend returns 'mlxlm'
   auto: 'Auto',
 }
 
-const providerColors: Record<LLMProvider, string> = {
+const providerColors: Record<string, string> = {
   openai: 'text-green-500',
   lmstudio: 'text-blue-500',
   ollama: 'text-purple-500',
   llamacpp: 'text-orange-500',
   mlx: 'text-cyan-500',
+  mlxlm: 'text-cyan-500',  // Backend returns 'mlxlm'
   auto: 'text-gray-500',
 }
 

@@ -118,6 +118,23 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'mai-settings-storage',
+      version: 1,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Partial<SettingsStore>
+        if (version === 0) {
+          // Migration from version 0: Add missing provider fields
+          return {
+            ...DEFAULT_SETTINGS,
+            ...state,
+            llmProvider: state.llmProvider || DEFAULT_SETTINGS.llmProvider,
+            ollamaUrl: state.ollamaUrl || DEFAULT_SETTINGS.ollamaUrl,
+            llamacppUrl: state.llamacppUrl || DEFAULT_SETTINGS.llamacppUrl,
+            mlxUrl: state.mlxUrl || DEFAULT_SETTINGS.mlxUrl,
+            openaiApiKey: state.openaiApiKey || DEFAULT_SETTINGS.openaiApiKey,
+          }
+        }
+        return state as SettingsStore
+      },
     }
   )
 )

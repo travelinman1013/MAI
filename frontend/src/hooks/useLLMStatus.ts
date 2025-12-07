@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getLLMStatus } from '@/services/api'
+import { useSettingsStore } from '@/stores'
 import type { LLMStatus, LLMProvider } from '@/types/chat'
 
 interface UseLLMStatusReturn {
@@ -10,10 +11,11 @@ interface UseLLMStatusReturn {
 }
 
 export function useLLMStatus(pollInterval = 30000): UseLLMStatusReturn {
+  const llmProvider = useSettingsStore((state) => state.llmProvider)
   const [status, setStatus] = useState<LLMStatus>({
     connected: false,
     model: null,
-    provider: 'auto',
+    provider: llmProvider,
   })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -21,11 +23,12 @@ export function useLLMStatus(pollInterval = 30000): UseLLMStatusReturn {
   const fetchStatus = useCallback(async () => {
     try {
       setError(null)
-      const data = await getLLMStatus()
+      // Pass the selected provider to get status for that specific provider
+      const data = await getLLMStatus(llmProvider !== 'auto' ? llmProvider : undefined)
       setStatus({
         connected: data?.connected ?? false,
         model: data?.model_name || data?.model || null,
-        provider: (data?.provider as LLMProvider) || 'auto',
+        provider: (data?.provider as LLMProvider) || llmProvider,
         availableProviders: data?.available_providers as LLMProvider[],
         error: data?.error || null,
         metadata: data?.metadata,
@@ -36,7 +39,7 @@ export function useLLMStatus(pollInterval = 30000): UseLLMStatusReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [llmProvider])
 
   useEffect(() => {
     fetchStatus()
