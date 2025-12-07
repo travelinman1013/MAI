@@ -1,4 +1,5 @@
 import { Plus, Settings, BarChart3, PanelLeftClose, PanelLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -6,6 +7,7 @@ import { Separator } from '@/components/ui/separator'
 import { SessionSearch } from './SessionSearch'
 import { SessionList } from './SessionList'
 import { useSessions } from '@/hooks/useSessions'
+import { useUIStore } from '@/stores'
 
 interface SidebarProps {
   isOpen: boolean
@@ -13,6 +15,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onToggle }: SidebarProps) {
+  const navigate = useNavigate()
+  const { toggleSettings } = useUIStore()
   const {
     groupedSessions,
     searchQuery,
@@ -103,6 +107,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 h-9"
+              onClick={() => navigate('/analytics')}
             >
               <BarChart3 className="h-4 w-4" />
               Analytics
@@ -110,6 +115,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 h-9"
+              onClick={toggleSettings}
             >
               <Settings className="h-4 w-4" />
               Settings

@@ -27,6 +27,7 @@ interface SettingsStore {
   llmProvider: LLMProvider
   ollamaUrl: string
   llamacppUrl: string
+  mlxUrl: string
   openaiApiKey: string
 
   // Actions
@@ -43,6 +44,7 @@ interface SettingsStore {
   setLLMProvider: (provider: LLMProvider) => void
   setOllamaUrl: (url: string) => void
   setLlamaCppUrl: (url: string) => void
+  setMLXUrl: (url: string) => void
   setOpenAIApiKey: (key: string) => void
 }
 
@@ -67,6 +69,7 @@ const DEFAULT_SETTINGS = {
   llmProvider: 'auto' as LLMProvider,
   ollamaUrl: 'http://localhost:11434',
   llamacppUrl: 'http://localhost:8080',
+  mlxUrl: 'http://localhost:8080',
   openaiApiKey: '',
 }
 
@@ -110,6 +113,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setLLMProvider: (provider) => set({ llmProvider: provider }),
       setOllamaUrl: (url) => set({ ollamaUrl: url }),
       setLlamaCppUrl: (url) => set({ llamacppUrl: url }),
+      setMLXUrl: (url) => set({ mlxUrl: url }),
       setOpenAIApiKey: (key) => set({ openaiApiKey: key }),
     }),
     {

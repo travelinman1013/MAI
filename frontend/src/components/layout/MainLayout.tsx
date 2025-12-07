@@ -7,7 +7,7 @@ import { useUIStore } from '@/stores'
 import { useKeyboardShortcuts } from '@/hooks'
 
 export function MainLayout() {
-  const { sidebarOpen } = useUIStore()
+  const { sidebarOpen, toggleSidebar } = useUIStore()
 
   // Initialize global keyboard shortcuts
   useKeyboardShortcuts()
@@ -15,7 +15,7 @@ export function MainLayout() {
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
-      <Sidebar isOpen={sidebarOpen} onToggle={() => {}} />
+      <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">

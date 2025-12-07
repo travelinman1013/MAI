@@ -2,7 +2,7 @@
 export type { Message, ChatSession } from '@/stores/chatStore'
 
 // LLM provider type
-export type LLMProvider = 'openai' | 'lmstudio' | 'ollama' | 'llamacpp' | 'auto'
+export type LLMProvider = 'openai' | 'lmstudio' | 'ollama' | 'llamacpp' | 'mlx' | 'auto'
 
 export interface Model {
   id: string

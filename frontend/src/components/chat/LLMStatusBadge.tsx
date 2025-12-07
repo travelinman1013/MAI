@@ -15,6 +15,7 @@ const providerLabels: Record<LLMProvider, string> = {
   lmstudio: 'LM Studio',
   ollama: 'Ollama',
   llamacpp: 'llama.cpp',
+  mlx: 'MLX-LM',
   auto: 'Auto',
 }
 
@@ -23,6 +24,7 @@ const providerColors: Record<LLMProvider, string> = {
   lmstudio: 'text-blue-500',
   ollama: 'text-purple-500',
   llamacpp: 'text-orange-500',
+  mlx: 'text-cyan-500',
   auto: 'text-gray-500',
 }
 

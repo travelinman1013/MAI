@@ -21,6 +21,7 @@ const providers: { value: LLMProvider; label: string; description: string }[] = 
   { value: 'lmstudio', label: 'LM Studio', description: 'Local LM Studio server' },
   { value: 'ollama', label: 'Ollama', description: 'Local Ollama server' },
   { value: 'llamacpp', label: 'llama.cpp', description: 'Local llama.cpp server' },
+  { value: 'mlx', label: 'MLX-LM', description: 'Apple Silicon local inference via MLX' },
 ]
 
 export function APISettings() {
@@ -30,12 +31,14 @@ export function APISettings() {
     lmStudioUrl,
     ollamaUrl,
     llamacppUrl,
+    mlxUrl,
     openaiApiKey,
     setApiBaseUrl,
     setLLMProvider,
     setLMStudioUrl,
     setOllamaUrl,
     setLlamaCppUrl,
+    setMLXUrl,
     setOpenAIApiKey,
   } = useSettingsStore()
   const { status, refresh, isLoading } = useLLMStatus()
@@ -202,6 +205,28 @@ export function APISettings() {
                 placeholder="http://localhost:8080"
                 value={llamacppUrl}
                 onChange={(e) => setLlamaCppUrl(e.target.value)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* MLX-LM Settings */}
+      {(llmProvider === 'mlx' || llmProvider === 'auto') && (
+        <Card>
+          <CardHeader>
+            <CardTitle>MLX-LM</CardTitle>
+            <CardDescription>Configure MLX-LM server connection (Apple Silicon)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="mlx-url">Server URL</Label>
+              <Input
+                id="mlx-url"
+                type="url"
+                placeholder="http://localhost:8080"
+                value={mlxUrl}
+                onChange={(e) => setMLXUrl(e.target.value)}
               />
             </div>
           </CardContent>
