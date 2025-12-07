@@ -24,7 +24,7 @@ export function useAgents(): UseAgentsReturn {
       setIsLoading(true)
       setError(null)
       const data = await getAgents()
-      setAgents(data || [])
+      setAgents(Array.isArray(data) ? data : [])
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch agents'))
       setAgents([])

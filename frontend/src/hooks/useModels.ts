@@ -23,7 +23,7 @@ export function useModels(): UseModelsReturn {
       setIsLoading(true)
       setError(null)
       const data = await getModels()
-      setModels(data || [])
+      setModels(Array.isArray(data) ? data : [])
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch models'))
       setModels([])

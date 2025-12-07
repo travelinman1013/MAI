@@ -69,7 +69,9 @@ export async function getAgents(): Promise<{ name: string; description: string }
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`)
   }
-  return response.json()
+  const data = await response.json()
+  // Backend returns { success, agents, count } - extract the array
+  return Array.isArray(data) ? data : (data.agents || [])
 }
 
 export async function getModels(): Promise<{ id: string; name: string }[]> {
