@@ -1,27 +1,19 @@
-export interface Message {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: Date
-  images?: string[]
-}
-
-export interface ChatSession {
-  id: string
-  title: string
-  createdAt: Date
-  updatedAt: Date
-  messages: Message[]
-}
+// Re-export from stores for backwards compatibility
+export type { Message, ChatSession } from '@/stores/chatStore'
 
 export interface Model {
   id: string
   name: string
-  provider: string
+  provider?: string
 }
 
 export interface AgentInfo {
   name: string
   description: string
-  capabilities: string[]
+  capabilities?: string[]
+}
+
+export interface LLMStatus {
+  connected: boolean
+  model: string | null
 }

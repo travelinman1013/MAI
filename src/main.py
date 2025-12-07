@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from src.api.routes import api_router
+from src.api.routes import health as health_router
 from src.core.agents.registry import agent_registry
 from src.core.agents.simple_agent import SimpleAgent
 from src.core.agents.chat_agent import ChatAgent
@@ -132,24 +133,9 @@ app = FastAPI(
 
 app.include_router(api_router, prefix="/api/v1")
 
+# Register health routes at root level (not under /api/v1)
+app.include_router(health_router.router)
+
 @app.get("/")
 async def root():
     return {"message": "MAI Framework API is running!"}
-
-
-@app.get("/health")
-async def health():
-    """Health check endpoint with service status."""
-    # Determine overall health - redis is required, postgresql and qdrant are optional
-    required_services = ["redis"]
-    required_healthy = all(_service_status.get(svc, False) for svc in required_services)
-
-    return {
-        "status": "healthy" if required_healthy else "degraded",
-        "services": {
-            "redis": _service_status.get("redis", False),
-            "postgresql": _service_status.get("postgresql", False),
-            "qdrant": _service_status.get("qdrant", False),
-        },
-        "version": "0.1.0",
-    }

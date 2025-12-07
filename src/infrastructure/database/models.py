@@ -2,9 +2,11 @@
 
 Models:
 - User: User accounts and authentication
-- Session: User sessions with authentication
+- UserSession: User sessions with authentication
 - Conversation: Conversation threads
 - Message: Individual messages in conversations
+- ChatSession: Frontend chat session persistence
+- ChatMessage: Messages within chat sessions
 - Memory: Memory storage with vector embeddings (pgvector)
 """
 
@@ -150,6 +152,76 @@ class Message(BaseModel):
         Index("idx_messages_conversation_created", "conversation_id", "created_at"),
         Index("idx_messages_role", "role", "created_at"),
     )
+
+
+class ChatSession(BaseModel):
+    """Chat session model for frontend chat persistence.
+
+    Attributes:
+        user_id: User identifier (string for flexibility before auth).
+        title: Session title (auto-generated or user-provided).
+        agent_name: Name of the agent used in session.
+        model_id: Model identifier used for the session.
+        chat_messages: Messages in this session.
+    """
+
+    __tablename__ = "chat_sessions"
+
+    user_id = Column(String(255), nullable=False, index=True)
+    title = Column(String(255), default="New Chat")
+    agent_name = Column(String(100), default="chat", index=True)
+    model_id = Column(String(255), nullable=True)
+
+    # Relationships
+    chat_messages = relationship(
+        "ChatMessage", back_populates="chat_session", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return f"<ChatSession {self.id}: {self.title}>"
+
+
+class ChatMessage(BaseModel):
+    """Chat message model for individual messages in a chat session.
+
+    Attributes:
+        session_id: Foreign key to ChatSession.
+        role: Message role (user, assistant, system).
+        content: Message content.
+        token_count: Estimated token count.
+        model_id: Model that generated this message (for assistant).
+        agent_name: Agent that processed this message.
+        response_time_ms: Response time in milliseconds.
+        is_error: Whether this message represents an error.
+        chat_session: Related chat session.
+    """
+
+    __tablename__ = "chat_messages"
+
+    session_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role = Column(String(20), nullable=False)  # user, assistant, system
+    content = Column(Text, nullable=False)
+    token_count = Column(Integer, default=0)
+    model_id = Column(String(255), nullable=True)
+    agent_name = Column(String(100), nullable=True)
+    response_time_ms = Column(Integer, nullable=True)
+    is_error = Column(Boolean, default=False)
+
+    # Relationships
+    chat_session = relationship("ChatSession", back_populates="chat_messages")
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_chat_messages_session_created", "session_id", "created_at"),
+    )
+
+    def __repr__(self):
+        return f"<ChatMessage {self.id}: {self.role}>"
 
 
 class Memory(BaseModel):
