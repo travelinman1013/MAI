@@ -1,11 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getLLMStatus } from '@/services/api'
-
-export interface LLMStatus {
-  connected: boolean
-  model?: string | null
-  error?: string
-}
+import type { LLMStatus, LLMProvider } from '@/types/chat'
 
 interface UseLLMStatusReturn {
   status: LLMStatus
@@ -15,7 +10,11 @@ interface UseLLMStatusReturn {
 }
 
 export function useLLMStatus(pollInterval = 30000): UseLLMStatusReturn {
-  const [status, setStatus] = useState<LLMStatus>({ connected: false })
+  const [status, setStatus] = useState<LLMStatus>({
+    connected: false,
+    model: null,
+    provider: 'auto',
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
@@ -25,12 +24,15 @@ export function useLLMStatus(pollInterval = 30000): UseLLMStatusReturn {
       const data = await getLLMStatus()
       setStatus({
         connected: data?.connected ?? false,
-        model: data?.model,
-        error: undefined,
+        model: data?.model_name || data?.model || null,
+        provider: (data?.provider as LLMProvider) || 'auto',
+        availableProviders: data?.available_providers as LLMProvider[],
+        error: data?.error || null,
+        metadata: data?.metadata,
       })
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch LLM status'))
-      setStatus({ connected: false, error: 'Connection failed' })
+      setStatus(prev => ({ ...prev, connected: false, error: 'Connection failed' }))
     } finally {
       setIsLoading(false)
     }

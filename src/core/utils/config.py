@@ -23,14 +23,14 @@ class LLMProviderSettings(BaseSettings):
 
     provider: str = Field(
         default="auto",
-        description="LLM provider to use: 'openai', 'lmstudio', or 'auto' (auto-detect)",
+        description="LLM provider to use: 'openai', 'lmstudio', 'ollama', 'llamacpp', or 'auto' (auto-detect)",
     )
 
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v: str) -> str:
         """Validate provider selection."""
-        allowed = {"openai", "lmstudio", "auto"}
+        allowed = {"openai", "lmstudio", "ollama", "llamacpp", "auto"}
         v_lower = v.lower()
         if v_lower not in allowed:
             raise ValueError(f"LLM provider must be one of {allowed}")
@@ -67,6 +67,108 @@ class LMStudioSettings(BaseSettings):
     max_tokens: int = Field(default=2048, description="Maximum tokens in response")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
     timeout: int = Field(default=30, ge=1, description="Request timeout in seconds")
+
+
+class OllamaSettings(BaseSettings):
+    """Ollama configuration.
+
+    Environment variables use OLLAMA__ prefix.
+    Example: OLLAMA__BASE_URL=http://localhost:11434/v1
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="OLLAMA__", env_nested_delimiter="__", extra="ignore"
+    )
+
+    base_url: str = Field(
+        default="http://localhost:11434/v1",
+        description="Base URL for Ollama API (OpenAI-compatible endpoint)",
+    )
+    api_key: str = Field(
+        default="ollama",
+        description="API key (Ollama accepts any value)",
+    )
+    model_name: str = Field(
+        default="llama3.2",
+        description="Default model to use",
+    )
+    max_tokens: int = Field(
+        default=2048,
+        description="Maximum tokens in response",
+    )
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature",
+    )
+    timeout: int = Field(
+        default=60,
+        ge=1,
+        description="Request timeout in seconds",
+    )
+    # Ollama-specific settings
+    num_ctx: int = Field(
+        default=4096,
+        description="Context window size",
+    )
+    num_parallel: int = Field(
+        default=2,
+        description="Number of parallel requests Ollama can handle",
+    )
+
+
+class LlamaCppSettings(BaseSettings):
+    """llama.cpp server configuration.
+
+    Environment variables use LLAMACPP__ prefix.
+    Example: LLAMACPP__BASE_URL=http://localhost:8080/v1
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="LLAMACPP__", env_nested_delimiter="__", extra="ignore"
+    )
+
+    base_url: str = Field(
+        default="http://localhost:8080/v1",
+        description="Base URL for llama.cpp server (OpenAI-compatible endpoint)",
+    )
+    api_key: str = Field(
+        default="not-needed",
+        description="API key (not required for llama.cpp)",
+    )
+    model_name: str = Field(
+        default="local-model",
+        description="Model identifier (used for logging/display)",
+    )
+    max_tokens: int = Field(
+        default=2048,
+        description="Maximum tokens in response",
+    )
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature",
+    )
+    timeout: int = Field(
+        default=120,
+        ge=1,
+        description="Request timeout in seconds (longer for large models)",
+    )
+    # llama.cpp-specific settings
+    n_gpu_layers: int = Field(
+        default=-1,
+        description="Number of GPU layers (-1 for all available)",
+    )
+    ctx_size: int = Field(
+        default=8192,
+        description="Context window size",
+    )
+    n_threads: int = Field(
+        default=4,
+        description="Number of CPU threads to use",
+    )
 
 
 class DatabaseSettings(BaseSettings):
@@ -251,6 +353,8 @@ class Settings(BaseSettings):
     llm: LLMProviderSettings = Field(default_factory=LLMProviderSettings)
     openai: OpenAISettings = Field(default_factory=OpenAISettings)
     lm_studio: LMStudioSettings = Field(default_factory=LMStudioSettings)
+    ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    llamacpp: LlamaCppSettings = Field(default_factory=LlamaCppSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     qdrant: QdrantSettings = Field(default_factory=QdrantSettings)

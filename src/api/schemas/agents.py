@@ -215,17 +215,22 @@ class AgentErrorResponse(BaseModel):
 class LLMStatusResponse(BaseModel):
     """Response schema for LLM connection status."""
 
-    provider: str = Field(..., description="LLM provider name (lmstudio, openai, none)")
-    connected: bool = Field(..., description="Whether LLM is connected and available")
-    model_name: Optional[str] = Field(None, description="Name of the loaded model if connected")
+    provider: str = Field(..., description="Active LLM provider name")
+    connected: bool = Field(..., description="Whether LLM provider is connected")
+    model_name: Optional[str] = Field(None, description="Name of the loaded model")
     error: Optional[str] = Field(None, description="Error message if not connected")
+    available_providers: Optional[List[str]] = Field(
+        None, description="List of all configured provider names"
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        None, description="Provider-specific metadata"
+    )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "provider": "lmstudio",
-                "connected": True,
-                "model_name": "google/gemma-3-12b",
-                "error": None
-            }
-        }
+    model_config = {"json_schema_extra": {"example": {
+        "provider": "ollama",
+        "connected": True,
+        "model_name": "llama3.2:latest",
+        "error": None,
+        "available_providers": ["openai", "lmstudio", "ollama", "llamacpp"],
+        "metadata": {"status": "ok"}
+    }}}

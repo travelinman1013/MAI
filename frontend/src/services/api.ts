@@ -82,7 +82,17 @@ export async function getModels(): Promise<{ id: string; name: string }[]> {
   return response.json()
 }
 
-export async function getLLMStatus(): Promise<{ connected: boolean; model: string | null }> {
+export interface LLMStatusResponse {
+  connected: boolean
+  model?: string | null
+  model_name?: string | null
+  provider?: string
+  available_providers?: string[]
+  error?: string | null
+  metadata?: Record<string, unknown>
+}
+
+export async function getLLMStatus(): Promise<LLMStatusResponse> {
   const response = await fetch(`${API_BASE}/agents/llm-status`)
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`)

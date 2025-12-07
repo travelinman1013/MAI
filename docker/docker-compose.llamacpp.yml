@@ -1,0 +1,51 @@
+# llama.cpp server service overlay
+# Usage: docker compose -f docker-compose.yml -f docker/docker-compose.llamacpp.yml up -d
+#
+# Note: You must provide a GGUF model file in the llamacpp_models volume
+# Example: docker cp /path/to/model.gguf mai-llamacpp:/models/model.gguf
+
+services:
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: mai-llamacpp
+    ports:
+      - "8080:8080"
+    volumes:
+      - llamacpp_models:/models
+    environment:
+      - LLAMA_ARG_CTX_SIZE=${LLAMACPP__CTX_SIZE:-8192}
+      - LLAMA_ARG_N_GPU_LAYERS=${LLAMACPP__N_GPU_LAYERS:--1}
+      - LLAMA_ARG_HOST=0.0.0.0
+      - LLAMA_ARG_PORT=8080
+    command: --model /models/${LLAMACPP__MODEL_FILE:-model.gguf}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - mai-network
+    # GPU support (uncomment if using NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # Override mai-api to connect to llama.cpp
+  mai-api:
+    environment:
+      - LLM__PROVIDER=llamacpp
+      - LLAMACPP__BASE_URL=http://llamacpp:8080/v1
+      - LLAMACPP__MODEL_NAME=${LLAMACPP__MODEL_NAME:-local-model}
+    depends_on:
+      llamacpp:
+        condition: service_healthy
+
+volumes:
+  llamacpp_models:
+    driver: local

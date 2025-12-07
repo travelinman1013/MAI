@@ -68,9 +68,18 @@ services:
       - REDIS__URL=redis://redis:6379/0
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
-      - LLM__PROVIDER=lmstudio
-      - LM_STUDIO__BASE_URL=http://host.docker.internal:1234/v1
-      - LM_STUDIO__MODEL_NAME=google/gemma-3-12b
+      # LLM Provider configuration
+      - LLM__PROVIDER=${LLM__PROVIDER:-lmstudio}
+      # LM Studio (default, running on host)
+      - LM_STUDIO__BASE_URL=${LM_STUDIO__BASE_URL:-http://host.docker.internal:1234/v1}
+      - LM_STUDIO__MODEL_NAME=${LM_STUDIO__MODEL_NAME:-google/gemma-3-12b}
+      # Ollama (when using docker-compose.ollama.yml or on host)
+      - OLLAMA__BASE_URL=${OLLAMA__BASE_URL:-http://host.docker.internal:11434/v1}
+      - OLLAMA__MODEL_NAME=${OLLAMA__MODEL_NAME:-llama3.2}
+      # llama.cpp (when using docker-compose.llamacpp.yml or on host)
+      - LLAMACPP__BASE_URL=${LLAMACPP__BASE_URL:-http://host.docker.internal:8080/v1}
+      - LLAMACPP__MODEL_NAME=${LLAMACPP__MODEL_NAME:-local-model}
+      # Database and Vector Store
       - DATABASE__URL=postgresql+asyncpg://postgres:postgres@postgres:5432/mai_framework
       - QDRANT__URL=http://qdrant:6333
       - QDRANT__API_KEY=${QDRANT_API_KEY:-mai-qdrant-secret-key}

@@ -8,6 +8,23 @@ import {
 } from '@/components/ui/tooltip'
 import { useLLMStatus } from '@/hooks'
 import { cn } from '@/lib/utils'
+import type { LLMProvider } from '@/types/chat'
+
+const providerLabels: Record<LLMProvider, string> = {
+  openai: 'OpenAI',
+  lmstudio: 'LM Studio',
+  ollama: 'Ollama',
+  llamacpp: 'llama.cpp',
+  auto: 'Auto',
+}
+
+const providerColors: Record<LLMProvider, string> = {
+  openai: 'text-green-500',
+  lmstudio: 'text-blue-500',
+  ollama: 'text-purple-500',
+  llamacpp: 'text-orange-500',
+  auto: 'text-gray-500',
+}
 
 interface LLMStatusBadgeProps {
   className?: string
@@ -20,9 +37,14 @@ export function LLMStatusBadge({ className }: LLMStatusBadgeProps) {
     ? 'text-green-500'
     : 'text-red-500'
 
-  const statusText = status.connected
-    ? `Connected${status.model ? ` - ${status.model}` : ''}`
-    : status.error || 'Disconnected'
+  const providerLabel = providerLabels[status.provider] || status.provider || 'Unknown'
+  const providerColor = providerColors[status.provider] || 'text-gray-500'
+
+  const truncatedModel = status.model
+    ? status.model.length > 20
+      ? status.model.slice(0, 20) + '...'
+      : status.model
+    : null
 
   return (
     <TooltipProvider>
@@ -40,14 +62,24 @@ export function LLMStatusBadge({ className }: LLMStatusBadgeProps) {
             ) : (
               <Circle className={cn('h-3 w-3 fill-current', statusColor)} />
             )}
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              {status.connected ? 'Online' : 'Offline'}
+            <span className={cn('text-xs hidden sm:inline', providerColor)}>
+              {providerLabel}
             </span>
+            {truncatedModel && (
+              <span className="text-xs text-muted-foreground hidden md:inline">
+                ({truncatedModel})
+              </span>
+            )}
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          <p>{statusText}</p>
-          <p className="text-xs text-muted-foreground">Click to refresh</p>
+          <div className="space-y-1">
+            <p><strong>Provider:</strong> {providerLabel}</p>
+            <p><strong>Status:</strong> {status.connected ? 'Connected' : 'Disconnected'}</p>
+            {status.model && <p><strong>Model:</strong> {status.model}</p>}
+            {status.error && <p className="text-red-500"><strong>Error:</strong> {status.error}</p>}
+            <p className="text-xs text-muted-foreground mt-2">Click to refresh</p>
+          </div>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

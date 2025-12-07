@@ -81,57 +81,127 @@ async def list_agents():
     description="Check if the LLM provider is connected and what model is loaded."
 )
 async def get_llm_status() -> LLMStatusResponse:
-    """
-    Get LLM connection status.
-
-    Returns information about the configured LLM provider and whether it's connected.
-    """
+    """Check LLM provider connection status."""
     from src.core.utils.config import get_settings
     from src.core.models.lmstudio_provider import lmstudio_health_check
+    from src.core.models.ollama_provider import ollama_health_check
+    from src.core.models.llamacpp_provider import llamacpp_health_check
 
     settings = get_settings()
     provider = settings.llm.provider
+    available_providers = ["openai", "lmstudio", "ollama", "llamacpp"]
 
     try:
-        if provider == "lmstudio":
-            health = await lmstudio_health_check()
-            return LLMStatusResponse(
-                provider="lmstudio",
-                connected=health.get("connected", False),
-                model_name=health.get("model_id"),
-                error=health.get("error"),
-            )
-        elif provider == "openai":
-            # For OpenAI, check if API key is configured
+        # Auto-detect active provider if set to auto
+        if provider == "auto":
+            # Try each provider
+            for p_name, health_fn in [
+                ("lmstudio", lmstudio_health_check),
+                ("ollama", ollama_health_check),
+                ("llamacpp", llamacpp_health_check),
+            ]:
+                try:
+                    health = await health_fn()
+                    # Handle both dict and ProviderHealthStatus returns
+                    if isinstance(health, dict):
+                        connected = health.get("connected", False)
+                        model_id = health.get("model_id")
+                        metadata = {k: v for k, v in health.items() if k not in ("connected", "model_id", "error")}
+                    else:
+                        connected = health.connected
+                        model_id = health.model_id
+                        metadata = health.metadata if hasattr(health, 'metadata') else None
+
+                    if connected:
+                        return LLMStatusResponse(
+                            provider=p_name,
+                            connected=True,
+                            model_name=model_id,
+                            available_providers=available_providers,
+                            metadata=metadata if metadata else None,
+                        )
+                except Exception:
+                    continue
+
+            # Check OpenAI
             if settings.openai.api_key:
                 return LLMStatusResponse(
                     provider="openai",
                     connected=True,
                     model_name=settings.openai.model,
-                    error=None,
+                    available_providers=available_providers,
                 )
-            else:
-                return LLMStatusResponse(
-                    provider="openai",
-                    connected=False,
-                    model_name=None,
-                    error="OpenAI API key not configured",
-                )
-        else:
+
+            # Nothing available
             return LLMStatusResponse(
-                provider=provider or "none",
+                provider="auto",
                 connected=False,
                 model_name=None,
+                error="No providers available",
+                available_providers=available_providers,
+            )
+
+        # Specific provider selected
+        if provider == "openai":
+            connected = bool(settings.openai.api_key)
+            return LLMStatusResponse(
+                provider=provider,
+                connected=connected,
+                model_name=settings.openai.model if connected else None,
+                error=None if connected else "No API key configured",
+                available_providers=available_providers,
+            )
+
+        elif provider == "lmstudio":
+            health = await lmstudio_health_check()
+            # lmstudio_health_check returns dict
+            return LLMStatusResponse(
+                provider=provider,
+                connected=health.get("connected", False),
+                model_name=health.get("model_id"),
+                error=health.get("error"),
+                available_providers=available_providers,
+                metadata={k: v for k, v in health.items() if k not in ("connected", "model_id", "error")} or None,
+            )
+
+        elif provider == "ollama":
+            health = await ollama_health_check()
+            return LLMStatusResponse(
+                provider=provider,
+                connected=health.connected,
+                model_name=health.model_id,
+                error=health.error,
+                available_providers=available_providers,
+                metadata=health.metadata if health.metadata else None,
+            )
+
+        elif provider == "llamacpp":
+            health = await llamacpp_health_check()
+            return LLMStatusResponse(
+                provider=provider,
+                connected=health.connected,
+                model_name=health.model_id,
+                error=health.error,
+                available_providers=available_providers,
+                metadata=health.metadata if health.metadata else None,
+            )
+
+        else:
+            return LLMStatusResponse(
+                provider=provider,
+                connected=False,
                 error=f"Unknown provider: {provider}",
+                available_providers=available_providers,
             )
 
     except Exception as e:
         logger.error(f"Error checking LLM status: {e}")
         return LLMStatusResponse(
-            provider=provider or "unknown",
+            provider=provider,
             connected=False,
             model_name=None,
             error=str(e),
+            available_providers=available_providers,
         )
 
 

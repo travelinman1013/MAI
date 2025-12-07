@@ -1,0 +1,45 @@
+# Ollama service overlay
+# Usage: docker compose -f docker-compose.yml -f docker/docker-compose.ollama.yml up -d
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - mai-network
+    # GPU support (uncomment if using NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # Override mai-api to connect to Ollama
+  mai-api:
+    environment:
+      - LLM__PROVIDER=ollama
+      - OLLAMA__BASE_URL=http://ollama:11434/v1
+      - OLLAMA__MODEL_NAME=${OLLAMA__MODEL_NAME:-llama3.2}
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama_data:
+    driver: local

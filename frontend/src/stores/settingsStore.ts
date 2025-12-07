@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { LLMProvider } from '@/types/chat'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -22,6 +23,12 @@ interface SettingsStore {
   lmStudioUrl: string
   keyboardShortcuts: KeyboardShortcuts
 
+  // New provider settings
+  llmProvider: LLMProvider
+  ollamaUrl: string
+  llamacppUrl: string
+  openaiApiKey: string
+
   // Actions
   setTheme: (theme: Theme) => void
   toggleVimMode: () => void
@@ -31,6 +38,12 @@ interface SettingsStore {
   setLMStudioUrl: (url: string) => void
   updateShortcut: (action: keyof KeyboardShortcuts, keys: string) => void
   resetToDefaults: () => void
+
+  // New provider actions
+  setLLMProvider: (provider: LLMProvider) => void
+  setOllamaUrl: (url: string) => void
+  setLlamaCppUrl: (url: string) => void
+  setOpenAIApiKey: (key: string) => void
 }
 
 const DEFAULT_SHORTCUTS: KeyboardShortcuts = {
@@ -50,6 +63,11 @@ const DEFAULT_SETTINGS = {
   apiBaseUrl: '/api/v1',
   lmStudioUrl: 'http://localhost:1234',
   keyboardShortcuts: DEFAULT_SHORTCUTS,
+  // New provider defaults
+  llmProvider: 'auto' as LLMProvider,
+  ollamaUrl: 'http://localhost:11434',
+  llamacppUrl: 'http://localhost:8080',
+  openaiApiKey: '',
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -87,6 +105,12 @@ export const useSettingsStore = create<SettingsStore>()(
       },
 
       resetToDefaults: () => set(DEFAULT_SETTINGS),
+
+      // New provider actions
+      setLLMProvider: (provider) => set({ llmProvider: provider }),
+      setOllamaUrl: (url) => set({ ollamaUrl: url }),
+      setLlamaCppUrl: (url) => set({ llamacppUrl: url }),
+      setOpenAIApiKey: (key) => set({ openaiApiKey: key }),
     }),
     {
       name: 'mai-settings-storage',

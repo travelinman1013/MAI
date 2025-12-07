@@ -3,7 +3,7 @@ export type { Model } from './useModels'
 export { useAgents } from './useAgents'
 export type { Agent } from './useAgents'
 export { useLLMStatus } from './useLLMStatus'
-export type { LLMStatus } from './useLLMStatus'
+// LLMStatus type is now in @/types/chat
 export { useSessions } from './useSessions'
 export type { SessionGroup, UseSessionsReturn } from './useSessions'
 export { useKeyboardShortcuts } from './useKeyboardShortcuts'

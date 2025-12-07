@@ -79,5 +79,13 @@ class LMStudioClient:
                 raise ConnectionError(f"Failed to unload model: {e}") from e
 
 
-# Singleton instance
-lmstudio_client = LMStudioClient()
+# Lazy singleton pattern - avoid calling get_settings() at import time
+_lmstudio_client: LMStudioClient | None = None
+
+
+def get_lmstudio_client() -> LMStudioClient:
+    """Get the LMStudio client singleton (lazy initialization)."""
+    global _lmstudio_client
+    if _lmstudio_client is None:
+        _lmstudio_client = LMStudioClient()
+    return _lmstudio_client
