@@ -224,7 +224,7 @@ export function APISettings() {
               <Input
                 id="mlx-url"
                 type="url"
-                placeholder="http://localhost:8080"
+                placeholder="http://localhost:8081"
                 value={mlxUrl}
                 onChange={(e) => setMLXUrl(e.target.value)}
               />

@@ -69,7 +69,7 @@ const DEFAULT_SETTINGS = {
   llmProvider: 'auto' as LLMProvider,
   ollamaUrl: 'http://localhost:11434',
   llamacppUrl: 'http://localhost:8080',
-  mlxUrl: 'http://localhost:8080',
+  mlxUrl: 'http://localhost:8081',
   openaiApiKey: '',
 }
 
