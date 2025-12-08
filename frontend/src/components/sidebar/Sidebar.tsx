@@ -25,11 +25,15 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
     createSession,
     deleteSession,
     renameSession,
-    setActiveSession,
   } = useSessions()
 
   const handleNewChat = () => {
-    createSession()
+    const newId = createSession()
+    navigate(`/chat/${newId}`)
+  }
+
+  const handleSelectSession = (id: string) => {
+    navigate(`/chat/${id}`)
   }
 
   return (
@@ -96,7 +100,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
             <SessionList
               groups={groupedSessions}
               activeSessionId={activeSessionId}
-              onSelectSession={setActiveSession}
+              onSelectSession={handleSelectSession}
               onRenameSession={renameSession}
               onDeleteSession={deleteSession}
             />
