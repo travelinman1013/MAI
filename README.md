@@ -1,11 +1,11 @@
 # MAI Framework
 
-A local-first AI agent framework built on Pydantic AI. Designed for building a private NotebookLM-style application with local LLM inference via LM Studio.
+A local-first AI agent framework built on Pydantic AI. Designed for building a private NotebookLM-style application with local LLM inference via LM Studio, llama.cpp, Ollama, or MLX-LM.
 
 ## What This Is
 
 MAI (My AI) is a personal AI framework that keeps everything local:
-- **Local LLM inference** via LM Studio (no API costs, full privacy)
+- **Local LLM inference** via LM Studio, llama.cpp, Ollama, or MLX-LM (no API costs, full privacy)
 - **Local vector search** via Qdrant (semantic memory)
 - **Local database** via PostgreSQL (conversations, users)
 - **Local caching** via Redis (session memory)
@@ -15,15 +15,18 @@ MAI (My AI) is a personal AI framework that keeps everything local:
 | Component | Status |
 |-----------|--------|
 | FastAPI backend | Working |
-| Gradio chat UI | Working (enhanced) |
+| React frontend | Working (new) |
+| Gradio chat UI | Working (legacy) |
 | Redis caching | Working |
-| LM Studio integration | Working (with model switching) |
-| PostgreSQL database | Configured (run prompts to set up) |
-| Qdrant vector store | Configured (run prompts to set up) |
+| LM Studio integration | Working |
+| llama.cpp integration | Working |
+| Ollama integration | Working |
+| MLX-LM integration | Working (with server management UI) |
+| PostgreSQL database | Configured |
+| Qdrant vector store | Configured |
 | Conversation memory | Working |
 | Image support | Working (multimodal chat) |
 | Document upload | Working (PDF/TXT/MD) |
-| Custom theme | Working |
 | RAG pipeline | Planned |
 
 ## Quick Start
@@ -54,16 +57,18 @@ docker compose ps
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| Chat UI | http://localhost:7860 | Gradio chat interface |
+| React UI | http://localhost:3000 | Modern React frontend (recommended) |
+| Gradio UI | http://localhost:7860 | Legacy Gradio interface |
 | API | http://localhost:8000 | FastAPI backend |
 | API Docs | http://localhost:8000/docs | Swagger documentation |
 | Health | http://localhost:8000/health | Service status |
 
 ### Test It
 
-1. Make sure LM Studio is running with a model loaded
-2. Open http://localhost:7860
-3. Start chatting
+1. Make sure an LLM provider is running (LM Studio, llama.cpp, Ollama, or MLX-LM)
+2. Open http://localhost:3000
+3. Go to Settings and select your provider
+4. Start chatting
 
 ## Features
 
@@ -114,6 +119,31 @@ Switch between different LM Studio models:
 2. The model will be loaded in LM Studio automatically
 3. Continue chatting with the new model
 
+### MLX-LM Server Management (Apple Silicon)
+
+For Apple Silicon Macs, MAI includes MLX-LM integration with a management UI:
+
+1. **Start the MLX Manager** (runs on host, manages MLX-LM server):
+   ```bash
+   ./scripts/start-mlx-manager.sh
+   ```
+
+2. **Configure in Settings**:
+   - Open http://localhost:3000 → Settings
+   - Select "MLX-LM" as your provider
+   - Use Start/Stop/Restart controls
+   - Select models from the dropdown
+
+The MLX Manager provides:
+- Server status monitoring (running/stopped, PID, uptime)
+- Model selection from your local models directory
+- Start/Stop/Restart controls
+- Configurable models directory path
+
+Default ports:
+- MLX-LM Server: `localhost:8081`
+- MLX Manager: `localhost:8082`
+
 ### Configuration
 
 GUI settings can be configured via environment variables:
@@ -137,29 +167,30 @@ GUI_SHOW_DEBUG_INFO=false
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         MAI Framework                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│   ┌──────────────┐         ┌──────────────┐                 │
-│   │  Gradio UI   │────────▶│  FastAPI     │                 │
-│   │  :7860       │         │  :8000       │                 │
-│   └──────────────┘         └──────┬───────┘                 │
-│                                   │                          │
-│                    ┌──────────────┼──────────────┐          │
-│                    ▼              ▼              ▼          │
-│             ┌──────────┐  ┌──────────┐  ┌──────────┐        │
-│             │  Redis   │  │ Postgres │  │  Qdrant  │        │
-│             │  :6379   │  │  :5432   │  │  :6333   │        │
-│             └──────────┘  └──────────┘  └──────────┘        │
-│                                                              │
-│                    ┌──────────────────────────┐             │
-│                    │       LM Studio          │             │
-│                    │    host.docker.internal  │             │
-│                    │         :1234            │             │
-│                    └──────────────────────────┘             │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                           MAI Framework                              │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   ┌──────────────┐  ┌──────────────┐         ┌──────────────┐       │
+│   │  React UI    │  │  Gradio UI   │────────▶│  FastAPI     │       │
+│   │  :3000       │──│  :7860       │         │  :8000       │       │
+│   └──────┬───────┘  └──────────────┘         └──────┬───────┘       │
+│          │                                          │                │
+│          │         ┌────────────────────────────────┤                │
+│          │         │                    ┌───────────┼───────────┐   │
+│          │         ▼                    ▼           ▼           ▼   │
+│          │  ┌──────────┐         ┌──────────┐ ┌──────────┐ ┌──────┐│
+│          │  │  Redis   │         │ Postgres │ │  Qdrant  │ │ LLM  ││
+│          │  │  :6379   │         │  :5432   │ │  :6333   │ │Server││
+│          │  └──────────┘         └──────────┘ └──────────┘ └──────┘│
+│          │                                                          │
+│          │  ┌───────────────────────────────────────────────────┐  │
+│          │  │              LLM Providers (host)                  │  │
+│          └──│  LM Studio :1234 │ llama.cpp :8080 │ Ollama :11434 │  │
+│             │                  MLX-LM :8081 (via Manager :8082)  │  │
+│             └───────────────────────────────────────────────────┘  │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Configuration
@@ -182,19 +213,30 @@ LM_STUDIO__MODEL_NAME=your-model-name
 
 ```
 MAI/
+├── frontend/             # React/TypeScript frontend
+│   ├── src/
+│   │   ├── components/   # UI components (chat, settings, sidebar)
+│   │   ├── hooks/        # React hooks (useMLXManager, useLLMStatus)
+│   │   ├── services/     # API clients (mlxManager.ts)
+│   │   ├── stores/       # Zustand state management
+│   │   └── pages/        # Page components
+│   └── Dockerfile        # Frontend container
 ├── src/
 │   ├── api/              # FastAPI routes
 │   ├── core/
 │   │   ├── agents/       # ChatAgent, SimpleAgent
 │   │   ├── memory/       # Short-term, long-term, context management
+│   │   ├── models/       # LLM providers (mlxlm, llamacpp, ollama)
 │   │   ├── tools/        # Tool registry and decorators
 │   │   └── utils/        # Config, logging, exceptions
-│   ├── gui/              # Gradio chat interface
+│   ├── gui/              # Gradio chat interface (legacy)
 │   └── infrastructure/
 │       ├── cache/        # Redis client
 │       ├── database/     # SQLAlchemy models, migrations
 │       └── vector_store/ # Qdrant client
-├── prompts/              # Sequential setup prompts (run these!)
+├── scripts/
+│   ├── mlx_manager.py    # MLX-LM server manager service
+│   └── start-mlx-manager.sh  # Manager startup script
 ├── docker-compose.yml    # Container orchestration
 ├── Dockerfile            # API container
 ├── Dockerfile.gui        # GUI container

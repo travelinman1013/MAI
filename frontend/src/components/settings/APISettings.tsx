@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { useSettingsStore } from '@/stores'
-import { useLLMStatus } from '@/hooks'
+import { useLLMStatus, useMLXManager } from '@/hooks'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -12,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RefreshCw, Check, X } from 'lucide-react'
+import { RefreshCw, Check, X, Play, Square, RotateCcw, FolderOpen, Loader2 } from 'lucide-react'
 import type { LLMProvider } from '@/types/chat'
 
 const providers: { value: LLMProvider; label: string; description: string }[] = [
@@ -213,25 +214,273 @@ export function APISettings() {
 
       {/* MLX-LM Settings */}
       {(llmProvider === 'mlx' || llmProvider === 'auto') && (
-        <Card>
-          <CardHeader>
-            <CardTitle>MLX-LM</CardTitle>
-            <CardDescription>Configure MLX-LM server connection (Apple Silicon)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="mlx-url">Server URL</Label>
-              <Input
-                id="mlx-url"
-                type="url"
-                placeholder="http://localhost:8081"
-                value={mlxUrl}
-                onChange={(e) => setMLXUrl(e.target.value)}
-              />
-            </div>
-          </CardContent>
-        </Card>
+        <MLXLMSettings mlxUrl={mlxUrl} setMLXUrl={setMLXUrl} />
       )}
     </div>
+  )
+}
+
+// ============================================================================
+// MLX-LM Settings Component
+// ============================================================================
+
+interface MLXLMSettingsProps {
+  mlxUrl: string
+  setMLXUrl: (url: string) => void
+}
+
+function MLXLMSettings({ mlxUrl, setMLXUrl }: MLXLMSettingsProps) {
+  const {
+    mlxModelsDirectory,
+    mlxManagerUrl,
+    setMLXModelsDirectory,
+    setMLXManagerUrl,
+  } = useSettingsStore()
+
+  const {
+    status,
+    models,
+    isLoading,
+    error,
+    managerAvailable,
+    start,
+    stop,
+    restart,
+    updateConfig,
+    refresh,
+    refreshModels,
+  } = useMLXManager()
+
+  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [localModelsDir, setLocalModelsDir] = useState(mlxModelsDirectory)
+
+  // Helper to format uptime
+  const formatUptime = (seconds: number | null) => {
+    if (!seconds) return ''
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    if (mins > 60) {
+      const hours = Math.floor(mins / 60)
+      return `${hours}h ${mins % 60}m`
+    }
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+  }
+
+  const handleStartServer = async () => {
+    const modelToStart = selectedModel || (models.length > 0 ? models[0].name : '')
+    if (modelToStart) {
+      await start(modelToStart)
+    }
+  }
+
+  const handleModelChange = async (model: string) => {
+    setSelectedModel(model)
+    // If server is running, restart with new model
+    if (status?.running && model !== status.model) {
+      await restart(model)
+    }
+  }
+
+  const handleUpdateModelsDirectory = async () => {
+    if (localModelsDir !== mlxModelsDirectory) {
+      setMLXModelsDirectory(localModelsDir)
+      await updateConfig({ models_directory: localModelsDir })
+      await refreshModels()
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>MLX-LM</CardTitle>
+            <CardDescription>Configure MLX-LM server (Apple Silicon)</CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={refresh}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Manager Status */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {managerAvailable ? (
+            <>
+              <Badge variant={status?.running ? 'default' : 'secondary'}>
+                {status?.running ? (
+                  <>
+                    <Check className="h-3 w-3 mr-1" />
+                    Running
+                  </>
+                ) : (
+                  <>
+                    <X className="h-3 w-3 mr-1" />
+                    Stopped
+                  </>
+                )}
+              </Badge>
+              {status?.pid && (
+                <span className="text-xs text-muted-foreground">PID: {status.pid}</span>
+              )}
+              {status?.uptime_seconds && (
+                <span className="text-xs text-muted-foreground">
+                  Uptime: {formatUptime(status.uptime_seconds)}
+                </span>
+              )}
+              {status?.model && (
+                <span className="text-sm text-muted-foreground truncate max-w-[200px]">
+                  Model: {status.model}
+                </span>
+              )}
+            </>
+          ) : (
+            <Badge variant="outline">
+              Manager Offline
+            </Badge>
+          )}
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
+
+        {/* Server Controls */}
+        {managerAvailable && (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStartServer}
+              disabled={isLoading || status?.running || models.length === 0}
+            >
+              <Play className="h-4 w-4 mr-1" />
+              Start
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={stop}
+              disabled={isLoading || !status?.running}
+            >
+              <Square className="h-4 w-4 mr-1" />
+              Stop
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => restart()}
+              disabled={isLoading || !status?.running}
+            >
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Restart
+            </Button>
+          </div>
+        )}
+
+        {/* Model Selection */}
+        {managerAvailable && (
+          <div className="space-y-2">
+            <Label htmlFor="mlx-model">Model</Label>
+            <div className="flex gap-2">
+              <Select
+                value={selectedModel || status?.model || ''}
+                onValueChange={handleModelChange}
+                disabled={models.length === 0}
+              >
+                <SelectTrigger id="mlx-model" className="flex-1">
+                  <SelectValue placeholder={models.length === 0 ? 'No models found' : 'Select model'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map((model) => (
+                    <SelectItem key={model.name} value={model.name}>
+                      <div className="flex justify-between items-center gap-4 w-full">
+                        <span className="truncate">{model.name}</span>
+                        <span className="text-xs text-muted-foreground">{model.size}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={refreshModels}
+                title="Refresh models list"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+            {models.length === 0 && managerAvailable && (
+              <p className="text-xs text-muted-foreground">
+                No models found. Check the models directory path below.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Server URL */}
+        <div className="space-y-2">
+          <Label htmlFor="mlx-url">Server URL</Label>
+          <Input
+            id="mlx-url"
+            type="url"
+            placeholder="http://localhost:8081"
+            value={mlxUrl}
+            onChange={(e) => setMLXUrl(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            MLX-LM server endpoint (default port: 8081)
+          </p>
+        </div>
+
+        {/* Manager URL */}
+        <div className="space-y-2">
+          <Label htmlFor="mlx-manager-url">Manager URL</Label>
+          <Input
+            id="mlx-manager-url"
+            type="url"
+            placeholder="http://localhost:8082"
+            value={mlxManagerUrl}
+            onChange={(e) => setMLXManagerUrl(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            MLX Manager service (start with: ./scripts/start-mlx-manager.sh)
+          </p>
+        </div>
+
+        {/* Models Directory */}
+        <div className="space-y-2">
+          <Label htmlFor="mlx-models-dir">Models Directory</Label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="mlx-models-dir"
+                className="pl-9"
+                placeholder="/path/to/models"
+                value={localModelsDir}
+                onChange={(e) => setLocalModelsDir(e.target.value)}
+                onBlur={handleUpdateModelsDirectory}
+                onKeyDown={(e) => e.key === 'Enter' && handleUpdateModelsDirectory()}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Directory containing MLX model folders (press Enter to apply)
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

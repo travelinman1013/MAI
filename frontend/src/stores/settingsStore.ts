@@ -30,6 +30,11 @@ interface SettingsStore {
   mlxUrl: string
   openaiApiKey: string
 
+  // MLX Manager settings
+  mlxModelsDirectory: string
+  mlxManagerUrl: string
+  mlxCurrentModel: string | null
+
   // Actions
   setTheme: (theme: Theme) => void
   toggleVimMode: () => void
@@ -46,6 +51,11 @@ interface SettingsStore {
   setLlamaCppUrl: (url: string) => void
   setMLXUrl: (url: string) => void
   setOpenAIApiKey: (key: string) => void
+
+  // MLX Manager actions
+  setMLXModelsDirectory: (dir: string) => void
+  setMLXManagerUrl: (url: string) => void
+  setMLXCurrentModel: (model: string | null) => void
 }
 
 const DEFAULT_SHORTCUTS: KeyboardShortcuts = {
@@ -71,6 +81,10 @@ const DEFAULT_SETTINGS = {
   llamacppUrl: 'http://localhost:8080',
   mlxUrl: 'http://localhost:8081',
   openaiApiKey: '',
+  // MLX Manager defaults
+  mlxModelsDirectory: '/Volumes/the-eagle/maxwell-ext/lmstudio/models/mlx-community',
+  mlxManagerUrl: 'http://localhost:8082',
+  mlxCurrentModel: null,
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -115,10 +129,15 @@ export const useSettingsStore = create<SettingsStore>()(
       setLlamaCppUrl: (url) => set({ llamacppUrl: url }),
       setMLXUrl: (url) => set({ mlxUrl: url }),
       setOpenAIApiKey: (key) => set({ openaiApiKey: key }),
+
+      // MLX Manager actions
+      setMLXModelsDirectory: (dir) => set({ mlxModelsDirectory: dir }),
+      setMLXManagerUrl: (url) => set({ mlxManagerUrl: url }),
+      setMLXCurrentModel: (model) => set({ mlxCurrentModel: model }),
     }),
     {
       name: 'mai-settings-storage',
-      version: 1,
+      version: 2,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<SettingsStore>
         if (version === 0) {
@@ -131,6 +150,19 @@ export const useSettingsStore = create<SettingsStore>()(
             llamacppUrl: state.llamacppUrl || DEFAULT_SETTINGS.llamacppUrl,
             mlxUrl: state.mlxUrl || DEFAULT_SETTINGS.mlxUrl,
             openaiApiKey: state.openaiApiKey || DEFAULT_SETTINGS.openaiApiKey,
+            // Also add MLX Manager fields for version 0
+            mlxModelsDirectory: DEFAULT_SETTINGS.mlxModelsDirectory,
+            mlxManagerUrl: DEFAULT_SETTINGS.mlxManagerUrl,
+            mlxCurrentModel: DEFAULT_SETTINGS.mlxCurrentModel,
+          }
+        }
+        if (version === 1) {
+          // Migration from version 1: Add MLX Manager fields
+          return {
+            ...state,
+            mlxModelsDirectory: state.mlxModelsDirectory || DEFAULT_SETTINGS.mlxModelsDirectory,
+            mlxManagerUrl: state.mlxManagerUrl || DEFAULT_SETTINGS.mlxManagerUrl,
+            mlxCurrentModel: state.mlxCurrentModel ?? DEFAULT_SETTINGS.mlxCurrentModel,
           }
         }
         return state as SettingsStore
