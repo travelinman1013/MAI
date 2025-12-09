@@ -1,4 +1,4 @@
-#VERSION 2.0: https://github.com/travelinman1013/MAI-v2
+# VERSION 2.0 (MLX BASED) HERE: https://github.com/travelinman1013/MAI-v2
 
 # MAI Framework
 
