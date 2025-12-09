@@ -1,3 +1,5 @@
+#VERSION 2.0: https://github.com/travelinman1013/MAI-v2
+
 # MAI Framework
 
 A local-first AI agent framework built on Pydantic AI. 
